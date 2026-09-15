@@ -5,19 +5,46 @@ frappe.ui.form.on("Traffic Fine Staging", {
 	refresh(frm) {
 		if (frm.is_new()) return;
 
-		if (frm.doc.status === "New") {
-			frm.add_custom_button(__("Promote to Fine"), () => {
-				frm.call("promote").then(() => frm.reload_doc());
-			});
-			frm.add_custom_button(__("Ignore"), () => {
-				frm.call("ignore").then(() => frm.reload_doc());
-			});
-		}
+        // creating purchase invoice button
 
-		if (frm.doc.status === "Duplicate" && frm.doc.transport_traffic_fine) {
-			frm.dashboard.set_headline(
-				__("Already recorded as {0}.", [frm.doc.transport_traffic_fine])
-			);
-		}
-	},
+		if (!frm.is_new() && !frm.doc.is_invoiced) {
+
+            frm.add_custom_button("Create Purchase Invoice", () => {
+
+                frappe.confirm(
+                    "Create a Purchase Invoice for this fine?",
+
+                    () => {
+
+                        frappe.call({
+                            method: "create_purchase_invoice",
+                            doc: frm.doc,
+							
+                            freeze: true,
+                            freeze_message: "Creating Purchase Invoice...",
+
+                            callback: function(r) {
+
+                                if (!r.exc && r.message) {
+
+                                    frappe.show_alert({
+                                        message:
+                                            `Purchase Invoice ${r.message} created successfully`,
+                                        indicator: "green"
+                                    });
+
+                                    // Reload the document.
+                                    // This will make is_invoiced = 1
+                                    // and therefore remove the button.
+                                    frm.reload_doc();
+                                }
+                            }
+                        });
+
+                    }
+                );
+
+            });
+        }
+	}
 });

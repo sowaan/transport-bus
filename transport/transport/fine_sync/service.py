@@ -2073,69 +2073,6 @@ def _vehicle_for_plate(plate_code, plate_number, plate_emirate=None):
 	})
 
 
-@frappe.whitelist()
-def promote_staging_rows(rows):
-	"""Create real fines from staged rows.
-
-	Imported fines are deliberately conservative: black points are held, and
-	responsibility defaults to Company. Both are human decisions - assigning a
-	driver automatically would feed the blacklisting chain off portal data
-	nobody has reviewed.
-
-	VAT is NOT added. A portal reports the authority's face amount, and a
-	traffic fine is a statutory penalty rather than a taxable supply, so
-	defaulting these to the doctype's usual 5% would overstate every imported
-	fine. Flagged for accounting sign-off; change it there, not here.
-	"""
-	_check_permission()
-
-	if isinstance(rows, str):
-		rows = json.loads(rows)
-
-	settings = frappe.get_single("Transport Settings")
-	default_responsibility = settings.get("imported_fine_responsibility") or "Company"
-
-	promoted, skipped = [], []
-	for name in rows:
-		staging = frappe.get_doc("Traffic Fine Staging", name)
-
-		if staging.status != "New":
-			skipped.append({"row": name, "reason": staging.status})
-			continue
-
-		fine = frappe.get_doc({
-			"doctype": "Transport Traffic Fine",
-			"source": "Portal Sync",
-			"source_portal": staging.portal,
-			"ticket_number": staging.ticket_number,
-			"vehicle": staging.vehicle,
-			# The plate travels independently of the vehicle link. A portal can
-			# report a fine for a plate that is not in the fleet yet, and losing
-			# it here would leave that fine with nothing identifying the car.
-			"plate_number": staging.plate,
-			"date_time": staging.fine_datetime,
-			"fine_type": staging.fine_type,
-			"fine_location": staging.fine_location,
-			"ticket_type": staging.ticket_type,
-			"description": staging.description,
-			# The authority's own point count, not the flat per-fine default.
-			"black_points": staging.black_points,
-			"portal_status": staging.portal_status,
-			"amount": staging.amount,
-			"discounted_amount": staging.discounted_amount,
-			"add_vat": 0,
-			"responsibility": default_responsibility,
-			"status": "Unpaid",
-			"black_points_on_hold": 1,
-		})
-		fine.flags.ignore_mandatory = True
-		fine.insert(ignore_permissions=True)
-
-		staging.db_set({"status": "Promoted", "transport_traffic_fine": fine.name})
-		promoted.append(fine.name)
-
-	return {"promoted": len(promoted), "fines": promoted, "skipped": skipped}
-
 
 @frappe.whitelist()
 def capture_portal_page(portal):

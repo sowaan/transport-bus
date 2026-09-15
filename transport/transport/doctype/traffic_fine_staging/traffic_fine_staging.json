@@ -1,7 +1,7 @@
 {
  "actions": [],
  "autoname": "TR-TFST-.YYYY.-.MM.-.#####",
- "creation": "2026-08-07 12:00:00.000000",
+ "creation": "2026-08-30 11:51:12.964391",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
@@ -11,6 +11,7 @@
   "col1",
   "status",
   "transport_traffic_fine",
+  "is_invoiced",
   "sec1",
   "vehicle",
   "plate",
@@ -163,12 +164,19 @@
    "in_list_view": 1,
    "label": "Last Fetched On",
    "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "is_invoiced",
+   "fieldtype": "Check",
+   "label": "Is Invoiced",
+   "read_only": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-29 18:00:00.000000",
+ "modified": "2026-09-14 20:51:59.732750",
  "modified_by": "Administrator",
  "module": "Transport",
  "name": "Traffic Fine Staging",

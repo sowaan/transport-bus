@@ -2,7 +2,7 @@
  "actions": [],
  "allow_rename": 1,
  "autoname": "field:portal_name",
- "creation": "2026-08-07 11:00:00.000000",
+ "creation": "2026-08-07 11:00:00",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
@@ -10,6 +10,7 @@
   "portal_name",
   "authority",
   "emirate",
+  "supplier",
   "column_break_identity",
   "access_route",
   "scope",
@@ -236,12 +237,18 @@
    "fieldtype": "Small Text",
    "label": "Last Capture",
    "read_only": 1
+  },
+  {
+   "fieldname": "supplier",
+   "fieldtype": "Link",
+   "label": "Supplier",
+   "options": "Supplier"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-30 15:30:00.000000",
+ "modified": "2026-09-14 21:28:42.950659",
  "modified_by": "Administrator",
  "module": "Transport",
  "name": "Traffic Fine Portal",
