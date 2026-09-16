@@ -13,20 +13,6 @@ frappe.ui.form.on("Traffic Fine Sync Run", {
 			);
 		}
 
-		if (frm.doc.fines_new) {
-			frm.add_custom_button(__("Promote Staged Fines"), () => {
-				frm.call("promote_staged_fines").then((r) => {
-					if (r.message) {
-						frappe.msgprint(
-							__("{0} fine(s) created. Black points are held pending review.", [
-								r.message.promoted,
-							])
-						);
-					}
-				});
-			});
-		}
-
 		frm.add_custom_button(__("View Staged Fines"), () => {
 			frappe.set_route("List", "Traffic Fine Staging", { sync_run: frm.doc.name });
 		});

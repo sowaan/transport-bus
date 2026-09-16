@@ -62,17 +62,3 @@ class TrafficFineSyncRun(Document):
 			self.status = "Completed"
 
 		self.save(ignore_permissions=True)
-
-	@frappe.whitelist()
-	def promote_staged_fines(self):
-		"""Turn every New staging row from this run into a real fine."""
-		from transport.transport.fine_sync.service import promote_staging_rows
-
-		rows = frappe.get_all(
-			"Traffic Fine Staging", filters={"sync_run": self.name, "status": "New"}, pluck="name"
-		)
-		if not rows:
-			frappe.msgprint(_("No new staged fines on this run."))
-			return {"promoted": 0}
-
-		return promote_staging_rows(rows)

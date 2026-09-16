@@ -355,13 +355,19 @@ def _stage_fine(run, portal_doc, vehicle, fine):
 	can legitimately know more than an earlier one - the first pass may have read
 	only the portal's list view while a second opened each fine's detail panel -
 	and dropping that would make re-fetching pointless. Only empty fields are
-	filled, and only while the row is still New, so nothing already reviewed or
-	corrected by a person is overwritten.
+	filled, and only while the row is still untouched - Unpaid and not yet
+	invoiced - so nothing a person has reviewed, settled or billed is overwritten.
+
+	Since Transport Traffic Fine was retired this row IS the fine, so the
+	conservative defaults that used to be applied at promotion time are applied
+	here instead: responsibility from Transport Settings, black points held, and
+	no VAT. All three are decisions a person is meant to confirm, and none of
+	them may be inferred from portal data nobody has read.
 	"""
 	existing = frappe.db.get_value(
 		"Traffic Fine Staging",
 		{"portal": portal_doc.name, "ticket_number": fine.ticket_number},
-		["name", "status"],
+		["name", "status", "is_invoiced"],
 		as_dict=True,
 	)
 	if existing:
@@ -376,7 +382,11 @@ def _stage_fine(run, portal_doc, vehicle, fine):
 		frappe.db.set_value(
 			"Traffic Fine Staging", existing.name, "last_fetched_on", now_datetime()
 		)
-		if existing.status == "New":
+		# "Nobody has acted on this yet" used to be `status == "New"`. With the
+		# fine's own lifecycle on this doctype, the equivalent is a row still
+		# Unpaid and not yet on an invoice - once either has moved, a person or
+		# the books have a stake in the values and a fetch may not touch them.
+		if existing.status == "Unpaid" and not existing.is_invoiced:
 			_enrich_staging_row(existing.name, vehicle, fine)
 		return False
 
@@ -400,11 +410,24 @@ def _stage_fine(run, portal_doc, vehicle, fine):
 		"description": fine.raw.get("description"),
 		"ticket_type": fine.raw.get("ticket_type"),
 		"raw_payload": json.dumps(fine.raw, indent=1, default=str)[:10000],
-		"status": "New",
+		"source": "Portal Sync",
+		"status": "Unpaid",
+		"responsibility": frappe.db.get_single_value(
+			"Transport Settings", "imported_fine_responsibility"
+		) or "Company",
+		# Assigning a driver automatically would feed the blacklisting chain off
+		# portal data nobody has reviewed, so the points are held until someone
+		# confirms the driver is genuinely responsible.
+		"black_points_on_hold": 1,
+		# A portal reports the authority's face amount. A traffic fine is a
+		# statutory penalty rather than a taxable supply, so defaulting this on
+		# would overstate every fetched fine. Flagged for accounting sign-off;
+		# change it there, not here.
+		"add_vat": 0,
 		"last_fetched_on": now_datetime(),
 	})
 	doc.insert(ignore_permissions=True)
-	return doc.status == "New"
+	return True
 
 
 @frappe.whitelist()

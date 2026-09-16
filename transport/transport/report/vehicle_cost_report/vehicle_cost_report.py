@@ -4,7 +4,7 @@
 """Doc section 17 (Vehicle Management & Reports): Fuel usage, Maintenance
 cost, Fine report, rolled into one vehicle-level cost view. Reuses
 fleetify's Fuel History / Service History (the shared Rental Vehicle
-master) plus this app's own Transport Traffic Fine - deliberately does not
+master) plus this app's own Traffic Fine Staging - deliberately does not
 attempt a per-project cost split (see Project Profit and Loss's note on
 why shared-vehicle costs aren't allocated per project)."""
 
@@ -29,7 +29,14 @@ def execute(filters=None):
 	for vehicle in vehicles:
 		fuel_cost = get_sum("Fuel History", "vehicle", vehicle.name, "date", filters, "total_cost")
 		maintenance_cost = get_sum("Service History", "vehicle", vehicle.name, "service_date", filters, "total_cost")
-		fine_cost = get_sum("Transport Traffic Fine", "vehicle", vehicle.name, "date_time", filters, "total_cost")
+		# Every fetched fine now counts, not just the handful someone had promoted
+		# into a separate doctype. Cancelled rows are excluded because they are not
+		# a cost; Unpaid ones are included because they are a liability already
+		# incurred. `total_cost` carries VAT when a row has it switched on.
+		fine_cost = get_sum(
+			"Traffic Fine Staging", "vehicle", vehicle.name, "fine_datetime", filters, "total_cost",
+			extra={"status": ("!=", "Cancelled")},
+		)
 
 		data.append(
 			{
@@ -46,8 +53,10 @@ def execute(filters=None):
 	return get_columns(), data
 
 
-def get_sum(doctype, link_field, vehicle, date_field, filters, sum_field):
+def get_sum(doctype, link_field, vehicle, date_field, filters, sum_field, extra=None):
 	conditions = {link_field: vehicle}
+	if extra:
+		conditions.update(extra)
 	if filters.get("from_date") and filters.get("to_date"):
 		conditions[date_field] = ("between", [filters.from_date, filters.to_date])
 
