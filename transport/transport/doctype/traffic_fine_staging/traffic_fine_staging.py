@@ -29,7 +29,7 @@ import json
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import flt
+from frappe.utils import escape_html, flt
 
 VAT_RATE = 0.05
 
@@ -165,6 +165,10 @@ class TrafficFineStaging(Document):
 		# CREATE PURCHASE INVOICE
 		# ---------------------------------------------------------
 		dumps = json.loads(self.raw_payload)
+		# the source where the fine was fetched from, e.g. "RTA" or "AD Police"
+		row = dumps.get("row") or {}
+		source = row.get("Source") or row.get("source") or "N/A"
+
 		purchase_invoice = frappe.get_doc({
 			"doctype": "Purchase Invoice",
 
@@ -176,17 +180,22 @@ class TrafficFineStaging(Document):
 					"item_code": ITEM_CODE,
 					"qty": 1,
 					"rate": self.amount,
-					"description": (
-						f"{self.description}\n"
-						f"Ticket Number: {self.ticket_number}\n"
-						f"Fine Type: {self.fine_type}\n"
-						f"Car: {dumps.get('vehicle_description', 'N/A')}\n"
-						
+
+					# Description is a Text Editor (HTML) field, so line breaks
+					# have to be <br> - a "\n" just collapses into whitespace.
+					"description": "<br>".join(
+						[
+							f"Description: {escape_html(self.description or '')}",
+							f"Ticket Number: {escape_html(self.ticket_number or '')}",
+							f"Fine Type: {escape_html(self.fine_type or '')}",
+							f"Car: {escape_html(dumps.get('vehicle_description') or 'N/A')}",
+							f"Source: {escape_html(source)}",
+						]
 					)
 				}
 			]
 		})
-
+		# purchase invoice in draft state, not submitted yet, so that it can be reviewed and approved before submission
 		purchase_invoice.insert()
 
 		# ---------------------------------------------------------
