@@ -11,6 +11,7 @@ them, and adding another northern-emirate police force needs no new code.
 import frappe
 from frappe import _
 
+from transport.transport.fine_sync.portals.darb import DarbFetcher
 from transport.transport.fine_sync.portals.moi import MoiFetcher
 from transport.transport.fine_sync.portals.rakta import RaktaFetcher
 from transport.transport.fine_sync.portals.rta import RtaFetcher
@@ -35,6 +36,13 @@ FETCHERS_BY_ROUTE = {
 # wrongly marked login-gated is one nobody tries again.
 FETCHERS_BY_KEY = {
 	"srta": SrtaFetcher,
+	# Registered without a reader, like RtaFetcher was. DARB's fines sit behind
+	# a sign-in carrying its own reCAPTCHA, behind a bot-management layer that
+	# refuses anything that is not a browser, and nobody has seen the signed-in
+	# table yet. Keyed here so a caller hears that, instead of "no fetcher is
+	# implemented for the Side Registry route" - which reads as though the
+	# portal were unrecognised rather than blocked for a stateable reason.
+	"darb": DarbFetcher,
 	# Public, and read only by the extension: RAKTA encrypts its search
 	# parameters in the browser, so the server cannot reproduce the request
 	# however many selectors it knows. Registered so that refusal is what a
