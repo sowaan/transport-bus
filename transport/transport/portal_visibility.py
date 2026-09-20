@@ -51,7 +51,7 @@ DOCTYPE = "Traffic Fine Portal"
 # Forgetting this step does not fail loudly - it makes the portal disappear
 # from the list view the moment somebody sets its fetcher_key, which reads as
 # a lost record rather than a missing allowlist entry.
-READABLE_IN_BROWSER = ("tamm", "rta", "rakta")
+READABLE_IN_BROWSER = ("tamm", "rta", "rakta", "darb")
 
 
 def portal_query_conditions(user=None):

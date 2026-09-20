@@ -1,5 +1,5 @@
 // GENERATED FILE - DO NOT EDIT BY HAND.
-// Generated 2026-09-18 from rakta.py, rta.py, tamm.py
+// Generated 2026-09-20 from darb.py, rakta.py, rta.py, tamm.py
 // by extension/tools/generate_extractors.py. Change the constants in those
 // Python modules and re-run the generator; edits made here are lost and,
 // worse, silently diverge from what the server-side fetcher reads.
@@ -13,6 +13,100 @@
 // regeneration away from reaching the other.
 
 globalThis.PORTAL_EXTRACTORS = {
+
+	// from darb.py
+	darb: {
+
+		// EXTRACT_ROWS_JS
+		extractRows: () => {
+  const tables = [...document.querySelectorAll('p-table table')];
+  if (!tables.length) return null;
+
+  // cell count -> which list it is, and where each value sits in the row.
+  const LISTS = {
+    12: { list: 'Traffic Toll', cols: { ticket: 1, brand: 2, plate: 3, issued: 4,
+                                        when: 5, description: 6, status: 7,
+                                        amount: 8, discounted: 9 } },
+    10: { list: 'Mawaqif',      cols: { ticket: 1, description: 2, plate: 3,
+                                        when: 4, area: 5, sector: 6, status: 7,
+                                        amount: 8 } },
+  };
+
+  // PrimeNG renders a hidden copy of the column header inside every cell for
+  // its mobile layout. Reading textContent without removing it returns the
+  // header welded to the value.
+  const text = (td) => {
+    if (!td) return '';
+    const copy = td.cloneNode(true);
+    copy.querySelectorAll('.ui-column-title').forEach((n) => n.remove());
+    return (copy.textContent || '').replace(/\s+/g, ' ').trim();
+  };
+
+  // The plate is a component, not a string, and it hands over its three parts
+  // already separated - which is what lets the server match a vehicle without
+  // parsing anything.
+  const plateOf = (td) => {
+    const vp = td && td.querySelector('vehicle-plate');
+    if (!vp) return { code: '', emirate: '', number: '', text: text(td) };
+    const part = (sel) => {
+      const el = vp.querySelector(sel);
+      return el ? (el.textContent || '').replace(/\s+/g, ' ').trim() : '';
+    };
+    // The emirate element holds the name more than once; the inner span is the
+    // single clean copy, and the outer text is the fallback if that moves.
+    const inner = vp.querySelector('.emritsName span');
+    return {
+      code: part('.platePrefix'),
+      emirate: inner ? (inner.textContent || '').trim() : part('.emritsName'),
+      number: part('.plateNumber'),
+      text: text(td),
+    };
+  };
+
+  const out = [];
+  for (const table of tables) {
+    const headers = [...table.querySelectorAll('thead th')]
+      .map((th) => (th.textContent || '').replace(/\s+/g, ' ').trim());
+
+    for (const tr of table.querySelectorAll('tbody tr')) {
+      const cells = [...tr.children];
+      const spec = LISTS[cells.length];
+      // The empty-list placeholder, or a shape this build does not know.
+      // Skipped rather than guessed at.
+      if (!spec) continue;
+
+      const c = spec.cols;
+      const plate = plateOf(cells[c.plate]);
+      const badge = cells[c.status] ? cells[c.status].querySelector('.badge') : null;
+
+      out.push({
+        _list: spec.list,
+        _ticket: text(cells[c.ticket]),
+        _description: text(cells[c.description]),
+        _plateCode: plate.code,
+        _plateEmirate: plate.emirate,
+        _plateNumber: plate.number,
+        _plateText: plate.text,
+        _issued: c.issued === undefined ? '' : text(cells[c.issued]),
+        _when: text(cells[c.when]),
+        _status: badge ? (badge.textContent || '').trim() : text(cells[c.status]),
+        // The state is in the modifier class as well as the text. Kept because
+        // the text is translated and the class is not.
+        _statusClass: badge ? badge.className : '',
+        _amount: text(cells[c.amount]),
+        _discounted: c.discounted === undefined ? '' : text(cells[c.discounted]),
+        _area: c.area === undefined ? '' : text(cells[c.area]),
+        _sector: c.sector === undefined ? '' : text(cells[c.sector]),
+        _brand: c.brand === undefined ? '' : text(cells[c.brand]),
+        // Carried so a column that moves shows up as a mismatch in the staged
+        // payload instead of as quietly wrong values.
+        _headers: headers,
+      });
+    }
+  }
+  return out;
+},
+	},
 
 	// from rakta.py
 	rakta: {
@@ -212,6 +306,7 @@ globalThis.PORTAL_EXTRACTORS = {
 };
 
 globalThis.PORTAL_ORIGINS = {
+ "darb": "https://darb.qmobility.ae",
  "rakta": "https://smart.rakta.gov.ae",
  "rta": "https://ums.rta.ae",
  "tamm": "https://www.tamm.abudhabi"

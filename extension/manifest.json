@@ -14,7 +14,8 @@
     "http://127.0.0.1:8001/*",
     "https://www.tamm.abudhabi/*",
     "https://ums.rta.ae/*",
-    "https://smart.rakta.gov.ae/*"
+    "https://smart.rakta.gov.ae/*",
+    "https://darb.qmobility.ae/*"
   ],
   "background": {
     "service_worker": "background.js"
