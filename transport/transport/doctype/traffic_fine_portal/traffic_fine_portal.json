@@ -11,6 +11,8 @@
   "authority",
   "emirate",
   "supplier",
+  "item",
+  "reference_label",
   "column_break_identity",
   "access_route",
   "scope",
@@ -243,12 +245,25 @@
    "fieldtype": "Link",
    "label": "Supplier",
    "options": "Supplier"
+  },
+  {
+   "fieldname": "item",
+   "fieldtype": "Link",
+   "label": "Item",
+   "options": "Item"
+  },
+  {
+   "default": "Ticket Number",
+   "description": "What this portal calls a fine's reference number on its own pages. TAMM says Fine Number, RTA says Ticket Number. Shown on the fine and printed on the invoice, so the figure an accountant is reconciling is named the same here as on the portal they are reconciling it against.",
+   "fieldname": "reference_label",
+   "fieldtype": "Data",
+   "label": "Reference Number Label"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-09-15 14:34:48.601547",
+ "modified": "2026-09-19 18:30:00.000000",
  "modified_by": "Administrator",
  "module": "Transport",
  "name": "Traffic Fine Portal",

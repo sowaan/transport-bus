@@ -406,11 +406,22 @@ def _stage_fine(run, portal_doc, vehicle, fine):
 		# fetcher that has these does not need its own staging code, and one
 		# that doesn't simply leaves them empty.
 		"discounted_amount": fine.raw.get("discounted_amount"),
+		# The offer in the authority's own words, deadline included. Kept as the
+		# published text because that is all there is - the window is prose
+		# ("35% if paid within 58 days") and no portal reports an expiry date to
+		# compute against. Whoever pays reads the deadline, rather than trusting
+		# a discounted figure that may already have lapsed.
+		"discount_note": fine.raw.get("discount"),
 		"portal_status": fine.raw.get("tamm_status") or fine.raw.get("portal_status"),
 		"description": fine.raw.get("description"),
 		"ticket_type": fine.raw.get("ticket_type"),
 		"raw_payload": json.dumps(fine.raw, indent=1, default=str)[:10000],
-		"source": "Portal Sync",
+		# The authority that issued the fine, which is not the portal it was read
+		# from - TAMM reports Abu Dhabi Police fines and RTA reports Dubai Police
+		# ones, and an invoice has to name the authority being paid. Every fetcher
+		# reports it under this one key, so a new portal needs no staging change.
+		# Whether a row was fetched at all is `raw_payload`, not this field.
+		"source": fine.raw.get("issuing_authority"),
 		"status": "Unpaid",
 		"responsibility": frappe.db.get_single_value(
 			"Transport Settings", "imported_fine_responsibility"
@@ -2030,6 +2041,8 @@ def _enrich_staging_row(name, vehicle, fine):
 		"portal_status": fine.raw.get("tamm_status") or fine.raw.get("portal_status"),
 		"description": fine.raw.get("description"),
 		"ticket_type": fine.raw.get("ticket_type"),
+		"source": fine.raw.get("issuing_authority"),
+		"discount_note": fine.raw.get("discount"),
 	}
 	updates = {
 		field: value

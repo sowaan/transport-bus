@@ -296,6 +296,14 @@ doc_events = {
 	# Rental Vehicle is fleetify's doctype - extended here via Custom Field
 	# fixtures plus this event, never by editing their files.
 	"Rental Vehicle": {"validate": "transport.transport.vehicle_plate.normalize_plate"},
+	# A fine records whether it has been invoiced, and only the invoice knows
+	# when that stops being true. Without these two, cancelling or deleting the
+	# invoice left the fine claiming it was billed and refusing to raise
+	# another - see transport/transport/fine_invoice.py.
+	"Purchase Invoice": {
+		"on_cancel": "transport.transport.fine_invoice.refresh_fine_on_cancel",
+		"on_trash": "transport.transport.fine_invoice.refresh_fine_on_trash",
+	},
 }
 
 # Permissions

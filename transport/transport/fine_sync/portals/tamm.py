@@ -535,6 +535,9 @@ class TammFetcher(OperatorAssistedFetcher):
 				# Why the fine was issued, in the authority's own words.
 				"description": details.get("Description"),
 				"ticket_type": details.get("Ticket Type"),
+				# Text, not a figure: TAMM publishes the offer as a sentence with
+				# the deadline in it, and the deadline is the part that matters.
+				"discount": details.get("Discount"),
 				"detail_status": details.get("Status"),
 				# The row exactly as read. Column ids are the portal's, not ours,
 				# so keeping the whole thing means a renamed or newly-added

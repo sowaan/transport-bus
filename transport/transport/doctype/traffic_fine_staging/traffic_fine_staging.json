@@ -13,6 +13,7 @@
   "status",
   "responsibility",
   "supplier",
+  "item",
   "is_invoiced",
   "sec1",
   "vehicle",
@@ -36,6 +37,7 @@
   "sec_amount",
   "amount",
   "discounted_amount",
+  "discount_note",
   "add_vat",
   "col_amount",
   "vat_amount",
@@ -47,7 +49,8 @@
   "driver_incident",
   "sec2",
   "description",
-  "raw_payload"
+  "raw_payload",
+  "reference_label"
  ],
  "fields": [
   {
@@ -62,23 +65,23 @@
    "fieldtype": "Link",
    "in_standard_filter": 1,
    "label": "Portal",
-   "mandatory_depends_on": "eval:doc.source=='Portal Sync'",
-   "options": "Traffic Fine Portal"
+   "mandatory_depends_on": "eval:!!doc.raw_payload",
+   "options": "Traffic Fine Portal",
+   "read_only": 1
   },
   {
    "fieldname": "ticket_number",
    "fieldtype": "Data",
    "label": "Ticket Number",
-   "mandatory_depends_on": "eval:doc.source=='Portal Sync'"
+   "mandatory_depends_on": "eval:!!doc.raw_payload",
+   "read_only": 1
   },
   {
-   "default": "Manual",
+   "description": "The authority that issued the fine, as the portal names it.",
    "fieldname": "source",
-   "fieldtype": "Select",
+   "fieldtype": "Data",
    "in_standard_filter": 1,
-   "label": "Source",
-   "options": "Manual\nPortal Sync",
-   "reqd": 1
+   "label": "Source"
   },
   {
    "fieldname": "col1",
@@ -109,9 +112,10 @@
    "fieldtype": "Link",
    "label": "Supplier",
    "options": "Supplier",
-   "read_only": 1
+   "read_only_depends_on": "eval:!!doc.portal"
   },
   {
+   "default": "0",
    "fieldname": "is_invoiced",
    "fieldtype": "Check",
    "label": "Is Invoiced",
@@ -126,13 +130,15 @@
    "fieldname": "vehicle",
    "fieldtype": "Link",
    "label": "Vehicle",
-   "options": "Rental Vehicle"
+   "options": "Rental Vehicle",
+   "read_only": 1
   },
   {
    "fieldname": "plate",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Plate"
+   "label": "Plate",
+   "read_only": 1
   },
   {
    "fieldname": "fine_datetime",
@@ -304,19 +310,44 @@
   {
    "fieldname": "description",
    "fieldtype": "Small Text",
-   "label": "Description"
+   "label": "Description",
+   "read_only": 1
   },
   {
    "fieldname": "raw_payload",
    "fieldtype": "Code",
    "label": "Raw Payload",
    "read_only": 1
+  },
+  {
+   "fetch_from": "portal.item",
+   "fieldname": "item",
+   "fieldtype": "Link",
+   "label": "Item",
+   "options": "Item",
+   "read_only_depends_on": "eval:!!doc.portal"
+  },
+  {
+   "fetch_from": "portal.reference_label",
+   "fieldname": "reference_label",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Reference Number Label",
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
+   "description": "The authority's discount in its own words, including the window it expires in. Kept as text because that is how it is published - there is no structured expiry to compute from.",
+   "fieldname": "discount_note",
+   "fieldtype": "Data",
+   "label": "Discount Offer",
+   "read_only": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-09-16 22:10:00.000000",
+ "modified": "2026-09-19 19:20:00.000000",
  "modified_by": "Administrator",
  "module": "Transport",
  "name": "Traffic Fine Staging",
