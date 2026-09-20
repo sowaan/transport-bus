@@ -1,13 +1,20 @@
 # Copyright (c) 2026, Sowaan and contributors
 # For license information, please see license.txt
 
-"""Sharjah Roads & Transport Authority — the one portal that can be queried
+"""Sharjah Roads & Transport Authority — the one portal the SERVER can query
 unattended.
 
 Confirmed by capture on 2026-08-07: the Fine Enquiry page is public, carries no
 CAPTCHA, and does not redirect to a login. Its form takes exactly the three
-plate parts we store. Every other portal captured so far ends at a sign-in wall
-(MOI on UAE Pass + reCAPTCHA, RAKTA and RTA on a login form).
+plate parts we store.
+
+**The claim that every other portal ends at a sign-in wall was wrong, and is
+corrected here rather than quietly deleted.** RAKTA was named in it; its fines
+route was measured on 2026-09-18 and is public - no login, no CAPTCHA. What is
+still true is narrower and is what this heading now says: SRTA is the only
+portal the *server* can query, because RAKTA encrypts its search parameters in
+the browser and can only be read by the extension. MOI (UAE Pass + reCAPTCHA)
+and RTA (login, then an OTP) do end at a sign-in wall.
 
 **Scope, and it matters:** SRTA covers transport and toll violations only. It
 is NOT the police traffic-fine registry, so a clean result here says nothing

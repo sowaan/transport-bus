@@ -359,7 +359,7 @@ async function runFetch(request, deskTabId, erpOrigin) {
 			deskTabId,
 			requestId,
 			"staging",
-			`Sending ${read.rows.length} fine(s) to ERPNext…`,
+			`Sending ${read.rows.length} fine(s) to SowaanERP...`,
 			read.rows.length
 		);
 
@@ -390,7 +390,7 @@ async function runFetch(request, deskTabId, erpOrigin) {
 			staged: result.staged,
 			truncated: read.truncated || unread.length > 0,
 			message:
-				(result.message || `${read.rows.length} fine(s) sent to ERPNext.`) + coverageNote,
+				(result.message || `${read.rows.length} fine(s) sent to SowaanERP.`) + coverageNote,
 		};
 	} catch (error) {
 		return { ok: false, message: String((error && error.message) || error) };

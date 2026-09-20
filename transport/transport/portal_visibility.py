@@ -45,9 +45,13 @@ import frappe
 DOCTYPE = "Traffic Fine Portal"
 
 # The readers that exist in extension/content/readers/. Add a key here when a
-# third reader ships. Short on purpose: a portal appearing in the registry is a
+# new reader ships. Short on purpose: a portal appearing in the registry is a
 # claim that somebody can actually read it.
-READABLE_IN_BROWSER = ("tamm", "rta")
+#
+# Forgetting this step does not fail loudly - it makes the portal disappear
+# from the list view the moment somebody sets its fetcher_key, which reads as
+# a lost record rather than a missing allowlist entry.
+READABLE_IN_BROWSER = ("tamm", "rta", "rakta")
 
 
 def portal_query_conditions(user=None):

@@ -1,5 +1,5 @@
 // GENERATED FILE - DO NOT EDIT BY HAND.
-// Generated 2026-09-11 from rta.py, tamm.py
+// Generated 2026-09-18 from rakta.py, rta.py, tamm.py
 // by extension/tools/generate_extractors.py. Change the constants in those
 // Python modules and re-run the generator; edits made here are lost and,
 // worse, silently diverge from what the server-side fetcher reads.
@@ -13,6 +13,35 @@
 // regeneration away from reaching the other.
 
 globalThis.PORTAL_EXTRACTORS = {
+
+	// from rakta.py
+	rakta: {
+
+		// EXTRACT_ROWS_JS
+		extractRows: () => {
+  const list = document.querySelector('#fines_enquiry .fine_enquiry_list');
+  if (!list) return null;
+
+  const table = list.querySelector('table.mytable');
+  if (!table) {
+    // The portal renders <h4 class="list_heading">No Record Found</h4> in
+    // place of the table. That is an answer - zero fines for this plate - and
+    // is reported as an empty array, never as a failure to read.
+    return list.querySelector('h4') ? [] : null;
+  }
+
+  return [...table.querySelectorAll('tbody tr')].map(tr => {
+    const cells = [...tr.children].map(td => (td.textContent || '').trim());
+    return {
+      _fineId:     cells[0] || '',
+      _details:    cells[1] || '',
+      _amount:     cells[2] || '',
+      _issuedDate: cells[3] || '',
+      _status:     cells[4] || '',
+    };
+  }).filter(row => row._fineId);
+},
+	},
 
 	// from rta.py
 	rta: {
@@ -183,6 +212,7 @@ globalThis.PORTAL_EXTRACTORS = {
 };
 
 globalThis.PORTAL_ORIGINS = {
+ "rakta": "https://smart.rakta.gov.ae",
  "rta": "https://ums.rta.ae",
  "tamm": "https://www.tamm.abudhabi"
 };

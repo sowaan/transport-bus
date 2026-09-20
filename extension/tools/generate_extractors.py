@@ -55,6 +55,26 @@ def read_class_string(tree, attr):
 	return None
 
 
+def read_class_tuple(tree, attr):
+	"""A tuple/list-of-strings class attribute declared by a fetcher, or None."""
+	for node in ast.walk(tree):
+		if not isinstance(node, ast.ClassDef):
+			continue
+		for stmt in node.body:
+			if not isinstance(stmt, ast.Assign):
+				continue
+			if not isinstance(stmt.value, (ast.Tuple, ast.List)):
+				continue
+			for target in stmt.targets:
+				if isinstance(target, ast.Name) and target.id == attr:
+					return [
+						element.value
+						for element in stmt.value.elts
+						if isinstance(element, ast.Constant) and isinstance(element.value, str)
+					]
+	return None
+
+
 def read_client_reader(tree):
 	"""The `client_reader` a fetcher class in this module declares, or None.
 
@@ -111,6 +131,8 @@ def build(readers):
 		parts.append(f"\n\t// from {readers[reader]['source']}\n")
 		parts.append(f"\t{reader}: {{\n")
 		for constant, key in WANTED.items():
+			if constant not in found:
+				continue
 			body = found[constant].strip()
 			parts.append(f"\n\t\t// {constant}\n")
 			parts.append(f"\t\t{key}: {body},\n")
@@ -142,7 +164,20 @@ def main():
 			# page, find nothing, and report a clean zero.
 			continue
 		found = read_constants(source)
-		missing = [name for name in WANTED if name not in found]
+		# What this portal claims to ship. Defaults to all three, so a fetcher
+		# that quietly drops one is still caught - that drift check is the
+		# reason this file is generated at all. A portal declares a shorter
+		# list only when the machinery genuinely does not exist: RAKTA has no
+		# pager and no detail view, and stub constants standing in for them
+		# would weaken the check for everybody to spare one portal.
+		declared = read_class_tuple(tree, "client_extractors") or list(WANTED)
+		unknown = [name for name in declared if name not in WANTED]
+		if unknown:
+			sys.exit(
+				f"{source.name} declares client_extractors with names this generator does "
+				f"not know: {', '.join(unknown)}"
+			)
+		missing = [name for name in declared if name not in found]
 		if missing:
 			# Declaring a reader and not defining what it reads with is drift, and
 			# the whole point of generating this file is that drift is caught here
@@ -152,7 +187,7 @@ def main():
 				f"{', '.join(missing)}"
 			)
 		readers[reader] = {
-			"constants": found,
+			"constants": {name: found[name] for name in declared},
 			"source": source.name,
 			"origin": read_class_string(tree, "client_origin"),
 		}
@@ -168,6 +203,8 @@ def main():
 		origin = readers[reader].get("origin") or "(no client_origin declared)"
 		print(f"  {readers[reader]['source']} -> PORTAL_EXTRACTORS.{reader}  on {origin}")
 		for constant, key in WANTED.items():
+			if constant not in found:
+				continue
 			print(f"      {constant:<18} -> {key}  ({len(found[constant])} chars)")
 
 

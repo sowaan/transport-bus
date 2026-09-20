@@ -12,6 +12,7 @@ import frappe
 from frappe import _
 
 from transport.transport.fine_sync.portals.moi import MoiFetcher
+from transport.transport.fine_sync.portals.rakta import RaktaFetcher
 from transport.transport.fine_sync.portals.rta import RtaFetcher
 from transport.transport.fine_sync.portals.srta import SrtaFetcher
 from transport.transport.fine_sync.portals.tamm import TammFetcher
@@ -23,10 +24,22 @@ FETCHERS_BY_ROUTE = {
 }
 
 # Portal-specific fetchers, checked first. The three Side Registry portals do
-# NOT share an implementation - SRTA is a public ASP.NET form while RAKTA sits
-# behind a login - so they cannot be keyed on the route.
+# NOT share an implementation - SRTA is a public ASP.NET form and RAKTA is a
+# public Angular one that encrypts its request body - so they cannot be keyed
+# on the route.
+#
+# RAKTA was recorded here as sitting "behind a login" until 2026-09-18, when
+# the fines route was measured and found to be public. The page is *called*
+# /home/login and offers a Sign in button for the account features, which is
+# where that reading came from. Corrected rather than left, because a portal
+# wrongly marked login-gated is one nobody tries again.
 FETCHERS_BY_KEY = {
 	"srta": SrtaFetcher,
+	# Public, and read only by the extension: RAKTA encrypts its search
+	# parameters in the browser, so the server cannot reproduce the request
+	# however many selectors it knows. Registered so that refusal is what a
+	# caller hears, rather than "no fetcher is implemented".
+	"rakta": RaktaFetcher,
 	# Operator-assisted: opens a window and waits for a person to sign in. It
 	# is keyed here like any other fetcher so the same run/staging machinery
 	# applies, but it can never be scheduled - see TammFetcher's module docs.
