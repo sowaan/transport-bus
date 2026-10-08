@@ -1,0 +1,96 @@
+{
+ "actions": [],
+ "creation": "2026-10-08 13:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "kind",
+  "band",
+  "days",
+  "from_time",
+  "to_time",
+  "amount",
+  "per",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "kind",
+   "fieldtype": "Select",
+   "label": "Kind",
+   "options": "Toll\nPenalty",
+   "default": "Toll",
+   "reqd": 1,
+   "in_list_view": 1,
+   "columns": 1
+  },
+  {
+   "fieldname": "band",
+   "fieldtype": "Data",
+   "label": "Band",
+   "in_list_view": 1,
+   "columns": 2,
+   "description": "e.g. Peak, Low-Peak, Off-Peak, 1st offence"
+  },
+  {
+   "fieldname": "days",
+   "fieldtype": "Select",
+   "label": "Days",
+   "options": "\nMon-Sat\nSunday\nAll",
+   "in_list_view": 1,
+   "columns": 1
+  },
+  {
+   "fieldname": "from_time",
+   "fieldtype": "Time",
+   "label": "From",
+   "in_list_view": 1,
+   "columns": 1,
+   "depends_on": "eval:doc.kind=='Toll'"
+  },
+  {
+   "fieldname": "to_time",
+   "fieldtype": "Time",
+   "label": "To",
+   "in_list_view": 1,
+   "columns": 1,
+   "depends_on": "eval:doc.kind=='Toll'",
+   "description": "May be earlier than From for a band that runs past midnight"
+  },
+  {
+   "fieldname": "amount",
+   "fieldtype": "Currency",
+   "label": "Amount (AED)",
+   "options": "AED",
+   "reqd": 1,
+   "in_list_view": 1,
+   "columns": 2
+  },
+  {
+   "fieldname": "per",
+   "fieldtype": "Select",
+   "label": "Per",
+   "options": "Transaction\nOffence\nYear cap",
+   "in_list_view": 1,
+   "columns": 1
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Data",
+   "label": "Notes"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-10-08 13:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Transport",
+ "name": "Toll Tariff Rate",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
