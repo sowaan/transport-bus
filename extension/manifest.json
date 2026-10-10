@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Transport Fine Fetch",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Reads the company traffic fines page in the operator's own browser and hands the rows to ERPNext.",
   "minimum_chrome_version": "116",
   "permissions": [
@@ -15,7 +15,8 @@
     "https://www.tamm.abudhabi/*",
     "https://ums.rta.ae/*",
     "https://smart.rakta.gov.ae/*",
-    "https://darb.qmobility.ae/*"
+    "https://darb.qmobility.ae/*",
+    "https://customers.salik.ae/*"
   ],
   "background": {
     "service_worker": "background.js"

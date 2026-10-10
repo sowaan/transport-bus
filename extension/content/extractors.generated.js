@@ -1,5 +1,5 @@
 // GENERATED FILE - DO NOT EDIT BY HAND.
-// Generated 2026-09-20 from darb.py, rakta.py, rta.py, tamm.py
+// Generated 2026-10-10 from darb.py, rakta.py, rta.py, salik.py, tamm.py
 // by extension/tools/generate_extractors.py. Change the constants in those
 // Python modules and re-run the generator; edits made here are lost and,
 // worse, silently diverge from what the server-side fetcher reads.
@@ -23,13 +23,30 @@ globalThis.PORTAL_EXTRACTORS = {
   if (!tables.length) return null;
 
   // cell count -> which list it is, and where each value sits in the row.
+  // Both column maps are DARB's compiled row templates, cell for cell.
+  //
+  // `payable` names how each list says a fine cannot be paid right now, and
+  // the two genuinely differ: Traffic Toll adds a "NotPayable" marker inside
+  // the badge when a fine is frozen, while Mawaqif simply omits the selection
+  // checkbox - it renders that only for a fine that is unpaid AND payable.
   const LISTS = {
-    12: { list: 'Traffic Toll', cols: { ticket: 1, brand: 2, plate: 3, issued: 4,
-                                        when: 5, description: 6, status: 7,
-                                        amount: 8, discounted: 9 } },
-    10: { list: 'Mawaqif',      cols: { ticket: 1, description: 2, plate: 3,
-                                        when: 4, area: 5, sector: 6, status: 7,
-                                        amount: 8 } },
+    12: { list: 'Traffic Toll', payable: 'marker',
+          cols: { ticket: 1, logo: 2, plate: 3, issued: 4, when: 5,
+                  description: 6, status: 7, amount: 8, discounted: 9 } },
+    10: { list: 'Mawaqif',      payable: 'checkbox',
+          cols: { ticket: 1, description: 2, plate: 3, when: 4, area: 5,
+                  sector: 6, status: 7, amount: 8 } },
+  };
+
+  // The paid flag, from the badge's colour class. DARB's template binds that
+  // class directly to the fine's paid flag, while the badge TEXT goes through
+  // the translation pipe - so the class holds in Arabic and the text does not.
+  // null when neither class is present: unknown, never guessed.
+  const paidOf = (badge) => {
+    if (!badge) return null;
+    if (badge.classList.contains('badge-success')) return true;
+    if (badge.classList.contains('badge-danger')) return false;
+    return null;
   };
 
   // PrimeNG renders a hidden copy of the column header inside every cell for
@@ -78,6 +95,32 @@ globalThis.PORTAL_EXTRACTORS = {
       const c = spec.cols;
       const plate = plateOf(cells[c.plate]);
       const badge = cells[c.status] ? cells[c.status].querySelector('.badge') : null;
+      const paid = paidOf(badge);
+
+      // The status word is the badge's FIRST span. Reading the whole badge
+      // would weld a frozen fine's "NotPayable" marker onto it.
+      const word = badge ? badge.querySelector('span') : null;
+      const status = word
+        ? (word.textContent || '').replace(/\s+/g, ' ').trim()
+        : badge ? (badge.textContent || '').replace(/\s+/g, ' ').trim() : text(cells[c.status]);
+
+      let notPayable = null;
+      if (spec.payable === 'marker') {
+        // Frozen: a second span inside the badge.
+        const frozen = !!badge && badge.querySelectorAll('span').length > 1;
+        notPayable = frozen ? true : (paid === null ? null : false);
+      } else if (spec.payable === 'checkbox') {
+        // Meaningful only for an unpaid fine - a paid one has no checkbox either.
+        const box = cells[0] && cells[0].querySelector('input[type=checkbox]');
+        notPayable = paid === false ? !box : (paid === true ? false : null);
+      }
+
+      // The brand cell is an image and nothing else. Its file name is the only
+      // place the make survives.
+      const img = c.logo === undefined ? null : (cells[c.logo] && cells[c.logo].querySelector('img'));
+      const logo = img
+        ? (img.getAttribute('src') || '').split(/[?#]/)[0].split('/').pop()
+        : '';
 
       out.push({
         _list: spec.list,
@@ -89,15 +132,16 @@ globalThis.PORTAL_EXTRACTORS = {
         _plateText: plate.text,
         _issued: c.issued === undefined ? '' : text(cells[c.issued]),
         _when: text(cells[c.when]),
-        _status: badge ? (badge.textContent || '').trim() : text(cells[c.status]),
-        // The state is in the modifier class as well as the text. Kept because
-        // the text is translated and the class is not.
+        _status: status,
+        _paid: paid,
+        _notPayable: notPayable,
+        // Kept alongside `_paid` so the raw payload shows what it was read from.
         _statusClass: badge ? badge.className : '',
         _amount: text(cells[c.amount]),
         _discounted: c.discounted === undefined ? '' : text(cells[c.discounted]),
         _area: c.area === undefined ? '' : text(cells[c.area]),
         _sector: c.sector === undefined ? '' : text(cells[c.sector]),
-        _brand: c.brand === undefined ? '' : text(cells[c.brand]),
+        _logo: logo,
         // Carried so a column that moves shows up as a mismatch in the staged
         // payload instead of as quietly wrong values.
         _headers: headers,
@@ -222,6 +266,62 @@ globalThis.PORTAL_EXTRACTORS = {
 },
 	},
 
+	// from salik.py
+	salik: {
+
+		// EXTRACT_ROWS_JS
+		extractRows: () => {
+	// Scoped to the trips container. The page holds a second table for parking
+	// trips and a statements table; neither is a toll crossing.
+	const table = document.querySelector('#trips-container table.toll-trips-table');
+	if (!table) return null;
+
+	const text = (el) => (el ? el.textContent : '').replace(/\s+/g, ' ').trim();
+
+	const HEADERS = ['Trip date', 'Trip time', 'Plate', 'Toll gate', 'Direction', 'Total amount (AED)'];
+	const LABELS = ['Tag number', 'Transaction ID', 'Transaction post date', 'Toll Schedule'];
+
+	const head = [...table.querySelectorAll('thead td, thead th')].slice(0, HEADERS.length).map(text);
+	const headOk = HEADERS.every((h, i) => (head[i] || '').startsWith(h));
+
+	const rows = [];
+	for (const tr of table.querySelectorAll('tr')) {
+		// classList, not a string compare: an expanded crossing is "open active".
+		if (!tr.classList.contains('open') || tr.classList.contains('trips-table-drop')) continue;
+
+		const cells = [...tr.children];
+		// The drop row is the very next row. Pairing by position in the table would
+		// shift every later crossing by one if a single drop row were missing.
+		const next = tr.nextElementSibling;
+		const drop = next && next.classList.contains('trips-table-drop') ? next : null;
+		const desc = drop ? [...drop.querySelectorAll('.description')] : [];
+
+		// Each description is a value, a <br>, then its label.
+		const value = (d) => (d && d.firstElementChild ? text(d.firstElementChild) : '');
+		const label = (d) => (d && d.lastElementChild ? text(d.lastElementChild) : '');
+
+		const labelsOk = desc.length === LABELS.length && LABELS.every((l, i) => label(desc[i]) === l);
+
+		rows.push({
+			_date: text(cells[0]),
+			_time: text(cells[1]),
+			_plate: text(cells[2]),
+			_gate: text(cells[3]),
+			_direction: text(cells[4]),
+			_amount: text(cells[5]),
+			_tag: value(desc[0]),
+			_txn: value(desc[1]),
+			_post: value(desc[2]),
+			_schedule: value(desc[3]),
+			// False when the row cannot be trusted by position: too few cells, no
+			// drop row, or labels that are not the four expected, in order.
+			_ok: headOk && cells.length >= 6 && labelsOk,
+		});
+	}
+	return rows;
+},
+	},
+
 	// from tamm.py
 	tamm: {
 
@@ -309,5 +409,6 @@ globalThis.PORTAL_ORIGINS = {
  "darb": "https://darb.qmobility.ae",
  "rakta": "https://smart.rakta.gov.ae",
  "rta": "https://ums.rta.ae",
+ "salik": "https://customers.salik.ae",
  "tamm": "https://www.tamm.abudhabi"
 };

@@ -19,6 +19,9 @@
 const TUNNEL_HEADERS = { "ngrok-skip-browser-warning": "true" };
 
 const INGEST_METHOD = "transport.transport.fine_sync.service.ingest_client_fetch";
+// Toll crossings are charges, not fines, and the fines endpoint invoices what it
+// stages. A portal whose target says kind "crossings" posts here instead.
+const INGEST_CROSSINGS_METHOD = "transport.transport.fine_sync.service.ingest_client_crossings";
 const TARGET_METHOD = "transport.transport.fine_sync.service.get_client_fetch_target";
 
 // Matches the server's sign-in window. A push notification approved on a phone
@@ -207,8 +210,8 @@ async function fetchTarget(erpOrigin, portal) {
  * reads it from the portal record instead, so a browser can never name which
  * fleet a batch of fines belongs to.
  */
-async function ingest({ erpOrigin, csrfToken, portal, rows, truncated }) {
-	const response = await fetch(`${erpOrigin}/api/method/${INGEST_METHOD}`, {
+async function ingest({ erpOrigin, csrfToken, portal, rows, truncated, method = INGEST_METHOD }) {
+	const response = await fetch(`${erpOrigin}/api/method/${method}`, {
 		method: "POST",
 		credentials: "include",
 		headers: {
@@ -352,14 +355,17 @@ async function runFetch(request, deskTabId, erpOrigin) {
 		});
 
 		if (!read || !read.ok) {
-			return { ok: false, message: describeReadFailure(read && read.state) };
+			return { ok: false, message: describeReadFailure(read && read.state, target) };
 		}
+
+		const crossings = target.kind === "crossings";
+		const noun = crossings ? "toll crossing(s)" : "fine(s)";
 
 		progress(
 			deskTabId,
 			requestId,
 			"staging",
-			`Sending ${read.rows.length} fine(s) to SowaanERP...`,
+			`Sending ${read.rows.length} ${noun} to SowaanERP...`,
 			read.rows.length
 		);
 
@@ -369,6 +375,7 @@ async function runFetch(request, deskTabId, erpOrigin) {
 			portal,
 			rows: read.rows,
 			truncated: read.truncated,
+			method: crossings ? INGEST_CROSSINGS_METHOD : INGEST_METHOD,
 		});
 
 		if (await settings.closeTabWhenDone()) {
@@ -390,7 +397,7 @@ async function runFetch(request, deskTabId, erpOrigin) {
 			staged: result.staged,
 			truncated: read.truncated || unread.length > 0,
 			message:
-				(result.message || `${read.rows.length} fine(s) sent to SowaanERP.`) + coverageNote,
+				(result.message || `${read.rows.length} ${noun} sent to SowaanERP.`) + coverageNote,
 		};
 	} catch (error) {
 		return { ok: false, message: String((error && error.message) || error) };
@@ -399,7 +406,17 @@ async function runFetch(request, deskTabId, erpOrigin) {
 	}
 }
 
-function describeReadFailure(state) {
+function describeReadFailure(state, target) {
+	// A crossings portal is Salik's customer account, not UAE Pass: the generic
+	// wording below would send the operator to approve a push that never comes.
+	if (target && target.kind === "crossings") {
+		if (state === "not-signed-in") {
+			return "The Salik sign-in was not completed, so there was nothing to read. Sign in to your Salik account in the tab, then press the button again.";
+		}
+		if (state === "no-table") {
+			return "Signed in, but the Salik transactions table never appeared. Nothing was read - if the page looks normal in the tab, press the button again.";
+		}
+	}
 	if (state === "not-signed-in") {
 		return (
 			"The sign-in was not completed, so there was nothing to read. The fines page needs " +

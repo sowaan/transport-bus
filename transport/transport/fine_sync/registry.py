@@ -15,6 +15,7 @@ from transport.transport.fine_sync.portals.darb import DarbFetcher
 from transport.transport.fine_sync.portals.moi import MoiFetcher
 from transport.transport.fine_sync.portals.rakta import RaktaFetcher
 from transport.transport.fine_sync.portals.rta import RtaFetcher
+from transport.transport.fine_sync.portals.salik import SalikTripsReader
 from transport.transport.fine_sync.portals.srta import SrtaFetcher
 from transport.transport.fine_sync.portals.tamm import TammFetcher
 
@@ -58,6 +59,22 @@ FETCHERS_BY_KEY = {
 	# reads as though the portal were unrecognised. See portals/rta.py.
 	"rta": RtaFetcher,
 }
+
+
+# Portals the extension reads that list CHARGES, not fines. Kept apart from
+# FETCHERS_BY_KEY on purpose: everything in that table is a FineFetcher whose
+# rows are staged as fines, and staging invoices. A toll crossing routed that way
+# would be billed as a penalty. These are never reachable from `get_fetcher`, so
+# `ingest_client_fetch` cannot be handed their rows - it refuses a portal with no
+# `_to_fine`, and these have none.
+CROSSING_READERS_BY_KEY = {
+	"salik": SalikTripsReader,
+}
+
+
+def crossing_reader_for(portal):
+	"""The reader class for a portal that lists toll crossings, or None."""
+	return CROSSING_READERS_BY_KEY.get((portal.get("fetcher_key") or "").strip().lower())
 
 
 def fetcher_class_for(portal):

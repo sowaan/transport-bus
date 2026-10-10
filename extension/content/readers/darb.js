@@ -11,17 +11,31 @@
 //    the content script survives. A hard navigation would tear this script
 //    down mid-run even when the route was right.
 //
-// 2. **There is nothing to submit.** Both lists are already populated when the
-//    page renders, including the one behind the inactive tab, so the reader
-//    never touches the tab strip and never runs a search.
+// 2. **There is nothing to submit, but there is something to wait for.** Both
+//    lists - including the one behind the inactive tab - fetch themselves the
+//    moment the page mounts, so the reader never touches the tab strip and
+//    never runs a search. But each mounts EMPTY first and fills in when DARB
+//    answers, behind its own loader. Reading before then would report no
+//    fines, so the reader waits for every loader to clear.
 //
 // 3. **It refuses rather than reporting zero when signed out.** The login page
 //    lives under the same path prefix, so this script runs there too. Saying
 //    "no fines" because nobody was signed in is the one failure that would put
 //    a clean bill in front of somebody who owes money.
 //
+// 4. **Past ten fines, a list is paged, and every page is read or the list is
+//    reported unread.** DARB's compiled template binds each table's paginator
+//    to `totalCount > gridPageSize`, page size 10, and each page is a server
+//    round trip. So a list with no paginator is complete, and one with a
+//    paginator is walked with its own next control. Anything that does not
+//    check out - a page that never loads, a short page before the last, a fine
+//    seen on two pages - ends that list as unread rather than read in part
+//    and passed off as whole. The walk has been tested against a stand-in
+//    built to the template, not yet against a real paged list.
+//
 // It never signs in, never types a credential and never answers the reCAPTCHA -
-// the operator does all three in their own browser. It never clicks Pay Fines.
+// the operator does all three in their own browser. It never clicks Pay Fines,
+// the per-row Pay Now buttons, or anything else in a row.
 
 (() => {
 	if (globalThis.__tffDarbLoaded) return;
@@ -45,6 +59,18 @@
 	// one appears can miss the second. This is how long the row count has to
 	// stand still before the page is considered finished.
 	const SETTLE_MS = 2000;
+
+	// One page of a paged list is one server request. This is its ceiling.
+	const PAGE_GRACE_MS = 45000;
+
+	// Bounds the walk. Five hundred fines on one account is far beyond anything
+	// seen; a longer list is reported unread rather than read in part.
+	const MAX_PAGES = 50;
+
+	// Kept back from the background's read budget so the answer still has
+	// time to reach it when the walk runs to the limit.
+	const BUDGET_MARGIN_MS = 10000;
+	const DEFAULT_BUDGET_MS = 20 * 60 * 1000;
 
 	// Where the app records the account type. Shared across tabs, and the only
 	// thing standing between this reader and signing the operator out.
@@ -117,12 +143,36 @@
 		return !!(await waitFor(() => onFinesRoute(route), APP_GRACE_MS));
 	}
 
-	/** Both tables, once their contents have stopped changing.
+	// DARB's own loading overlay. Each list's component holds an
+	// `app-page-loading` that renders this element while that list's search is
+	// in flight, and removes it when the answer is in.
+	const LOADER = ".loadingAber";
+	const FINES_COMPONENTS = "owner-fines, mawaqif-fines";
+
+	/** The component a table belongs to - where its loader and totals live.
 	 *
-	 * Settled rather than merely present: the two lists are fetched
-	 * separately, so reading at first sight of a table can capture one list
-	 * and miss the other entirely - which would look like a complete read of
-	 * half the debt.
+	 * Falls back to the whole document if the component tags ever change, so
+	 * the loader check gets broader rather than silently disappearing.
+	 */
+	const componentOf = (el) => (el && el.closest(FINES_COMPONENTS)) || document;
+
+	/** Whether a list - or, given the document, any list - is still loading. */
+	function loadingIn(scope) {
+		if (scope !== document) return !!scope.querySelector(LOADER);
+		const components = document.querySelectorAll(FINES_COMPONENTS);
+		if (!components.length) return !!document.querySelector(LOADER);
+		return [...components].some((component) => !!component.querySelector(LOADER));
+	}
+
+	/** Both tables, once neither is loading and their contents have stopped changing.
+	 *
+	 * **Both lists mount EMPTY and fetch afterwards.** DARB's tables are lazy:
+	 * each renders its "No Records" placeholder first, raises its loader, and
+	 * fills in when the server answers. A table that has merely stopped
+	 * changing may be one whose answer has not arrived - and reading it then
+	 * reports no fines over a list that has them. So settled means no loader
+	 * showing AND nothing changing for SETTLE_MS. A list still loading when
+	 * the grace runs out is left to readList, which reports it unread.
 	 */
 	async function awaitTables() {
 		const appeared = await waitFor(
@@ -131,16 +181,19 @@
 		);
 		if (!appeared) return false;
 
-		const count = () => document.querySelectorAll("p-table table tbody tr").length;
-		let last = count();
+		const state = () =>
+			[...document.querySelectorAll("p-table table")]
+				.map((table) => signature(table.closest("p-table") || table))
+				.join("\u0000");
+		let last = state();
 		let steadySince = Date.now();
 		const deadline = Date.now() + TABLES_GRACE_MS;
 
-		while (Date.now() - steadySince < SETTLE_MS) {
+		while (loadingIn(document) || Date.now() - steadySince < SETTLE_MS) {
 			if (Date.now() > deadline) break;
 			await sleep(POLL_MS);
-			const now = count();
-			if (now !== last) {
+			const now = state();
+			if (now !== last || loadingIn(document)) {
 				last = now;
 				steadySince = Date.now();
 			}
@@ -148,53 +201,238 @@
 		return true;
 	}
 
-	// A table is identified by how many columns its header row has. The header
-	// row is the part that has been seen for BOTH lists; a populated Traffic
-	// Toll body row has not been, which is exactly why identification must not
-	// depend on one.
+	/** The list's own "Total Pending Fines" figure in AED, or null.
+	 *
+	 * DARB shows this card per list, from a separate request. null whenever
+	 * it cannot be read cleanly - no component, no card, its own loader still
+	 * showing, or no number - so the check that uses it only ever adds doubt.
+	 */
+	function pendingTotal(component) {
+		if (!component || component === document) return null;
+		const card = component.querySelector(".secondaryBg");
+		if (!card || card.querySelector(".div_loader")) return null;
+		const figure = [...card.querySelectorAll("p.whiteText")].find(
+			(p) => !p.classList.contains("fz-12")
+		);
+		const n = figure ? parseFloat((figure.textContent || "").replace(/,/g, "").trim()) : NaN;
+		return Number.isFinite(n) ? n : null;
+	}
+
+	// A table is identified by how many columns its header row has, which is
+	// the one thing about it that survives the language toggle. Both counts are
+	// DARB's compiled templates: twelve for Traffic Toll, ten for Mawaqif.
 	const LIST_BY_HEADER_COUNT = { 12: "Traffic Toll", 10: "Mawaqif" };
 
-	/** What each rendered list contributed, checked against what it rendered.
+	/** Rows in one table that are meant to carry a fine.
 	 *
-	 * **This is the guard on the one thing about this portal that is still
-	 * unverified.** The extractor maps a row's cells by counting them, and only
-	 * Mawaqif's count has been confirmed against real rows - the account that
-	 * was captured had an empty Traffic Toll list, so its twelve columns are
-	 * known from the header alone. If a real Traffic Toll row turns out to
-	 * render some other number of cells, the extractor skips every one of them.
-	 *
-	 * Without this check that lands as `read: 0` - a list reporting no fines -
-	 * and the run completes clean over a list full of them. So each table's
-	 * rendered rows are counted independently of the extractor, and any
-	 * shortfall is reported as `read: null`: unread, which forces `truncated`
-	 * and downgrades the run instead of quietly blessing it.
+	 * The empty-list placeholder is a single cell spanning the table, so
+	 * anything wider is a fine - whether or not the extractor could read it.
+	 * Counting independently of the extractor is the point: a row shape the
+	 * extractor does not know is skipped there, and only this count notices.
 	 */
-	function coverageFor(rows) {
-		const counts = {};
-		for (const row of rows) counts[row._list] = (counts[row._list] || 0) + 1;
+	const fineRows = (host) =>
+		[...host.querySelectorAll("tbody tr")].filter((tr) => tr.children.length > 1);
 
-		return [...document.querySelectorAll("p-table table")].map((table) => {
-			const headerCount = table.querySelectorAll("thead th").length;
-			const list = LIST_BY_HEADER_COUNT[headerCount] || `unrecognised (${headerCount} columns)`;
+	/** What one table shows right now, compact enough to compare across pages. */
+	const signature = (host) =>
+		fineRows(host)
+			.map((tr) => (tr.textContent || "").replace(/\s+/g, " ").trim())
+			.join("\n");
 
-			// The empty-list placeholder is a single cell spanning the table.
-			// Anything wider is a row that was meant to carry a fine.
-			const rendered = [...table.querySelectorAll("tbody tr")].filter(
-				(tr) => tr.children.length > 1
-			).length;
-			const extracted = counts[list] || 0;
+	/** The table's own next control. PrimeNG renders it only when it pages. */
+	const nextControl = (host) => host.querySelector("a.ui-paginator-next");
 
-			if (rendered !== extracted) {
-				return {
-					list,
-					read: null,
-					reason:
-						`${rendered} row(s) are on the page in a shape this build does not ` +
-						`recognise, and ${extracted} could be read`,
-				};
+	/** PrimeNG binds `ui-state-disabled` on next to its isLastPage(). */
+	const onLastPage = (link) => link.classList.contains("ui-state-disabled");
+
+	/** The page number the pager has marked active, or null. */
+	function activePage(host) {
+		const link = host.querySelector("a.ui-paginator-page.ui-state-active");
+		const n = link ? parseInt((link.textContent || "").trim(), 10) : NaN;
+		return Number.isFinite(n) ? n : null;
+	}
+
+	/** The rows-per-page the pager's own dropdown shows, or null if not found.
+	 *
+	 * A cross-check only: the operator can change it, which is why the page
+	 * size is taken from page one rather than assumed to be ten.
+	 */
+	function rowsPerPageShown(host) {
+		const label = host.querySelector(".ui-paginator .ui-dropdown-label");
+		const n = label ? parseInt((label.textContent || "").trim(), 10) : NaN;
+		return Number.isFinite(n) ? n : null;
+	}
+
+	/** Wait until a list has stopped loading and its table has stood still for SETTLE_MS. */
+	async function settle(host, deadline) {
+		const component = componentOf(host);
+		let last = signature(host);
+		let steadySince = Date.now();
+		while (loadingIn(component) || Date.now() - steadySince < SETTLE_MS) {
+			if (Date.now() > deadline) return false;
+			await sleep(POLL_MS);
+			const now = signature(host);
+			if (now !== last || loadingIn(component)) {
+				last = now;
+				steadySince = Date.now();
 			}
-			return { list, read: extracted };
-		});
+		}
+		return true;
+	}
+
+	/** Every fine in one list, and the coverage line that says how it went.
+	 *
+	 * Page one is checked exactly as before: the rows on the page are counted
+	 * independently of the extractor, and any shortfall is `read: null` -
+	 * unread, which forces `truncated` and downgrades the run instead of
+	 * quietly blessing it. That guard predates the pager and still matters: a
+	 * row shape the extractor does not know would otherwise land as a list
+	 * reporting no fines.
+	 *
+	 * With no pager, that is the whole list. With one, the walk clicks the
+	 * table's own next control and waits for that table to change, page after
+	 * page, until next is disabled. Rows read before a failure are still
+	 * returned - they are real fines - but the list is marked unread, so the
+	 * run says it is incomplete.
+	 */
+	async function readList(host, list, deadline, progress) {
+		const rowsOfList = () => (extractRows() || []).filter((row) => row._list === list);
+		const unread = (rows, reason) => ({ rows, entry: { list, read: null, reason } });
+		const component = componentOf(host);
+
+		/** The list as read - unless DARB's own total says it cannot be.
+		 *
+		 * A search that fails on DARB's side clears the loader and leaves the
+		 * empty placeholder, which is indistinguishable from "no fines" in the
+		 * table itself. The pending-total card is a separate request, so a
+		 * balance there with no unpaid fine read means the table is not the
+		 * whole story. It can also mean DARB counts fines it does not list
+		 * here; either way the run must not say this list was read clean.
+		 */
+		const finished = (rows) => {
+			const pending = pendingTotal(component);
+			if (pending !== null && pending > 0 && !rows.some((row) => row._paid === false)) {
+				return unread(
+					rows,
+					`DARB shows AED ${pending} pending on this list, but no unpaid fine could be read`
+				);
+			}
+			return { rows, entry: { list, read: rows.length } };
+		};
+
+		if (loadingIn(component)) return unread([], "it was still loading when the wait ran out");
+
+		const first = rowsOfList();
+		const rendered = fineRows(host).length;
+		if (rendered !== first.length) {
+			return unread(
+				first,
+				`${rendered} row(s) are on the page in a shape this build does not ` +
+					`recognise, and ${first.length} could be read`
+			);
+		}
+		for (const row of first) row._page = 1;
+
+		if (!nextControl(host)) return finished(first);
+
+		// Paged. DARB only shows a pager when the list is longer than one page,
+		// so page one is full and its size is the page size.
+		const pageSize = first.length;
+		const shown = rowsPerPageShown(host);
+		if (shown !== null && shown !== pageSize) {
+			return unread(
+				first,
+				`its first page held ${pageSize} fine(s) while the pager is set to ${shown} a page`
+			);
+		}
+
+		const all = [...first];
+		const seen = new Set(first.map((row) => row._ticket).filter(Boolean));
+		let lastCount = pageSize;
+
+		for (let page = 2; ; page++) {
+			const link = nextControl(host);
+			if (!link) return unread(all, `its pager disappeared after page ${page - 1}`);
+			if (onLastPage(link)) break;
+
+			// More pages follow, so the one just read had to be full.
+			if (lastCount !== pageSize) {
+				return unread(
+					all,
+					`page ${page - 1} held ${lastCount} fine(s) where ${pageSize} were ` +
+						`expected, with more pages after it`
+				);
+			}
+			if (page > MAX_PAGES) return unread(all, `it runs past ${MAX_PAGES} pages`);
+			if (Date.now() > deadline) return unread(all, `time ran out before page ${page}`);
+
+			progress({ stage: "reading", message: `Reading ${list}, page ${page}…` });
+
+			const before = signature(host);
+			link.click();
+			const loaded = await waitFor(
+				() => signature(host) !== before && fineRows(host).length > 0,
+				Math.max(0, Math.min(PAGE_GRACE_MS, deadline - Date.now()))
+			);
+			if (!loaded) return unread(all, `page ${page} did not load`);
+			if (!(await settle(host, deadline))) return unread(all, `time ran out on page ${page}`);
+			if (activePage(host) !== page) {
+				return unread(all, `the pager did not move to page ${page}`);
+			}
+
+			const rows = rowsOfList();
+			const onPage = fineRows(host).length;
+			if (onPage !== rows.length) {
+				return unread(
+					all,
+					`page ${page} has ${onPage} row(s) on the page and ${rows.length} could be read`
+				);
+			}
+			for (const row of rows) {
+				// The list moved under the walk - a fine paid or added mid-read
+				// shifts every later page by one. Any count from here is wrong.
+				if (row._ticket && seen.has(row._ticket)) {
+					return unread(all, `the list changed while it was being read (page ${page})`);
+				}
+				if (row._ticket) seen.add(row._ticket);
+				row._page = page;
+				all.push(row);
+			}
+			lastCount = rows.length;
+		}
+
+		return finished(all);
+	}
+
+	/** Every fines table on the page, read list by list. */
+	async function readAllLists(deadline, progress) {
+		const rows = [];
+		const coverage = [];
+
+		for (const table of document.querySelectorAll("p-table table")) {
+			const host = table.closest("p-table") || table;
+			const headerCount = table.querySelectorAll("thead th").length;
+			const list = LIST_BY_HEADER_COUNT[headerCount];
+
+			if (!list) {
+				const rendered = fineRows(host).length;
+				coverage.push(
+					rendered
+						? {
+								list: `unrecognised (${headerCount} columns)`,
+								read: null,
+								reason: `${rendered} row(s) are on the page in a shape this build does not recognise, and 0 could be read`,
+							}
+						: { list: `unrecognised (${headerCount} columns)`, read: 0 }
+				);
+				continue;
+			}
+
+			const result = await readList(host, list, deadline, progress);
+			rows.push(...result.rows);
+			coverage.push(result.entry);
+		}
+		return { rows, coverage };
 	}
 
 	chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -210,6 +448,9 @@
 		};
 
 		(async () => {
+			const budget = Number(message.budgetMs) > 0 ? Number(message.budgetMs) : DEFAULT_BUDGET_MS;
+			const deadline = Date.now() + Math.max(0, budget - BUDGET_MARGIN_MS);
+
 			progress({ stage: "reading", message: "Opening the DARB fines page…" });
 
 			// Give the app a moment to restore a session before judging it -
@@ -254,13 +495,20 @@
 				return;
 			}
 
-			const rows = extractRows();
-			if (rows === null) {
+			if (extractRows() === null) {
 				sendResponse({ ok: false, state: "no-table" });
 				return;
 			}
 
-			const coverage = coverageFor(rows);
+			const { rows, coverage } = await readAllLists(deadline, progress);
+
+			// Checked again after the walk, which can take a while: a session
+			// that ended part-way leaves later pages unread behind a pager that
+			// looked finished.
+			if (!signedIn()) {
+				sendResponse({ ok: false, state: "not-signed-in" });
+				return;
+			}
 
 			sendResponse({
 				ok: true,

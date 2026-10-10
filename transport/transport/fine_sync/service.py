@@ -30,7 +30,12 @@ from transport.transport.fine_sync.base import (
 	safe_slug,
 )
 from transport.transport.fine_sync.browser_fetcher import BrowserFetcher
-from transport.transport.fine_sync.registry import fetcher_class_for, get_fetcher, is_supported
+from transport.transport.fine_sync.registry import (
+	crossing_reader_for,
+	fetcher_class_for,
+	get_fetcher,
+	is_supported,
+)
 from transport.transport.vehicle_plate import PLATE_FIELDS, normalize_emirate
 
 SYNC_ROLES = ("Transport Accounts", "Transport Operations", "System Manager")
@@ -849,6 +854,10 @@ def enqueue_operator_assisted_sync(portal, include_details=1):
 # to tie the worker up.
 MAX_CLIENT_FETCH_ROWS = 5000
 
+# Toll crossings arrive ten to a "Load more", and the reader stops at about a
+# thousand. Twice that is a cap no honest read reaches.
+MAX_CLIENT_CROSSING_ROWS = 2000
+
 
 def _client_fetch_target(fetcher, portal_doc, traffic_file_number):
 	"""Where the extension should navigate, or a refusal that says why.
@@ -931,6 +940,13 @@ def get_client_fetch_target(portal):
 	state, not the credential's name.
 	"""
 	portal_doc = _client_fetch_portal(portal)
+
+	# A portal that lists toll charges rather than fines. `kind` tells the
+	# extension which endpoint the rows go to; without it they would be posted
+	# to the fines route, which invoices what it stages.
+	crossing_reader = crossing_reader_for(portal_doc)
+	if crossing_reader:
+		return {**crossing_reader.client_fetch_target(), "kind": "crossings"}
 
 	# The traffic file number is read here but not returned. TAMM carries the
 	# fleet in a query parameter, so its fetcher builds it into the URL; a
@@ -1082,6 +1098,127 @@ def ingest_client_fetch(portal, rows, truncated=0, fetched_at=None):
 		"truncated": truncated,
 		"reason": reason,
 	}
+
+
+@frappe.whitelist(methods=["POST"])
+def ingest_client_crossings(portal, rows, truncated=0, fetched_at=None):
+	"""Store toll crossings the operator's browser read from the portal.
+
+	**This writes Toll Crossing, never Traffic Fine Staging.** A toll is a charge,
+	and staging a charge as a fine invoices it. That is why this is its own
+	endpoint rather than a branch of `ingest_client_fetch`, and why
+	`ingest_client_fetch` itself still refuses these portals: they have no
+	`_to_fine`.
+
+	All or nothing. Every row is parsed before any is written, and a row that
+	does not parse - an amount that is not a number, a time that is not a time -
+	stops the batch. The reader checks the page's layout, so an unreadable value
+	here means the page changed, and half a day's tolls would look complete.
+
+	A crossing already stored is skipped, not overwritten: the transaction id is
+	the document's name, so a second read of the same window adds only what is
+	new. The same value also arrives untrusted from a browser, and a re-read must
+	not be able to change a charge that was already recorded.
+	"""
+	portal_doc = _client_fetch_portal(portal)
+
+	reader = crossing_reader_for(portal_doc)
+	if not reader:
+		frappe.throw(
+			_("{0} does not list toll crossings. Its rows cannot be stored here.").format(
+				portal_doc.name
+			),
+			title=_("Portal Not Supported"),
+		)
+
+	if isinstance(rows, str):
+		try:
+			rows = json.loads(rows)
+		except ValueError:
+			frappe.throw(_("Rows were not valid JSON."), title=_("Malformed Fetch"))
+	if not isinstance(rows, list):
+		frappe.throw(_("Rows must be a list."), title=_("Malformed Fetch"))
+	if len(rows) > MAX_CLIENT_CROSSING_ROWS:
+		frappe.throw(
+			_("This batch carries {0} rows, past the {1} a single fetch may post.").format(
+				len(rows), MAX_CLIENT_CROSSING_ROWS
+			),
+			title=_("Batch Too Large"),
+		)
+	if any(not isinstance(row, dict) for row in rows):
+		frappe.throw(_("Every row must be an object."), title=_("Malformed Fetch"))
+
+	truncated = bool(int(truncated or 0))
+
+	crossings = []
+	for number, row in enumerate(rows, start=1):
+		try:
+			crossing = reader.to_crossing(row)
+		except ValueError as exc:
+			frappe.throw(
+				_("Row {0} could not be read ({1}). Nothing was stored - the page has probably "
+				  "changed.").format(number, exc),
+				title=_("Malformed Fetch"),
+			)
+		if crossing:
+			crossings.append(crossing)
+
+	# One transaction id twice in a batch is the page repeating itself, not two
+	# charges. The reader already refuses this; a browser that skipped the reader
+	# must not be able to make the second copy a "duplicate already stored".
+	if len({c["transaction_id"] for c in crossings}) != len(crossings):
+		frappe.throw(
+			_("A transaction appears more than once in this batch. Nothing was stored."),
+			title=_("Malformed Fetch"),
+		)
+
+	stored, already = 0, 0
+	fetched = now_datetime()
+	for crossing in crossings:
+		name = f"TC-{crossing['authority']}-{crossing['transaction_id']}"
+		if frappe.db.exists("Toll Crossing", name):
+			already += 1
+			continue
+		vehicle = _vehicle_for_printed_plate(crossing.get("plate_text"))
+		doc = frappe.get_doc({
+			"doctype": "Toll Crossing",
+			**crossing,
+			"vehicle": vehicle.name if vehicle else None,
+			"fetched_on": fetched,
+		})
+		try:
+			# No role can create a Toll Crossing; this endpoint is the only way in.
+			doc.insert(ignore_permissions=True)
+		except frappe.DuplicateEntryError:
+			# Lost a race with another read of the same window.
+			already += 1
+			continue
+		stored += 1
+		if stored % 50 == 0:
+			_checkpoint()
+	_checkpoint()
+
+	message = _("{0} new toll crossing(s) stored; {1} were already recorded.").format(stored, already)
+	if truncated:
+		message += " " + _(
+			"The browser stopped before the end of the list, so these are some of the "
+			"crossings and not all of them."
+		)
+
+	return {"staged": stored, "already": already, "truncated": truncated, "message": message}
+
+
+def _vehicle_for_printed_plate(plate_text):
+	"""The fleet vehicle for a plate printed as "<emirate> <code> <number>", or None.
+
+	Only the three-part form is read. Salik prints a plate as it is on the car and
+	nobody has shown that every plate splits the same way, so anything else is
+	left unlinked for a person rather than guessed at.
+	"""
+	parts = (plate_text or "").split()
+	if len(parts) != 3:
+		return None
+	return _vehicle_for_plate(parts[1], parts[2], parts[0])
 
 
 def _session_banked_at(fetcher):

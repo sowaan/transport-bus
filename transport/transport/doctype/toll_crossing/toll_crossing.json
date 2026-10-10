@@ -1,0 +1,160 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "format:TC-{authority}-{transaction_id}",
+ "creation": "2026-10-10 10:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "authority",
+  "transaction_id",
+  "crossed_on",
+  "posted_on",
+  "column_break_1",
+  "amount",
+  "fetched_on",
+  "vehicle_section",
+  "plate_text",
+  "vehicle",
+  "tag_number",
+  "gate_section",
+  "gate",
+  "direction",
+  "column_break_2",
+  "toll_schedule"
+ ],
+ "fields": [
+  {
+   "fieldname": "authority",
+   "fieldtype": "Select",
+   "label": "Authority",
+   "options": "Salik\nDarb",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "transaction_id",
+   "fieldtype": "Data",
+   "label": "Transaction ID",
+   "reqd": 1,
+   "in_list_view": 1,
+   "description": "The portal's own id for the crossing"
+  },
+  {
+   "fieldname": "crossed_on",
+   "fieldtype": "Datetime",
+   "label": "Crossed On",
+   "reqd": 1,
+   "in_list_view": 1,
+   "description": "Local UAE time"
+  },
+  {
+   "fieldname": "posted_on",
+   "fieldtype": "Date",
+   "label": "Posted On"
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "amount",
+   "fieldtype": "Currency",
+   "label": "Amount (AED)",
+   "options": "AED",
+   "in_list_view": 1,
+   "description": "Total including VAT as shown by the portal; 0.00 is valid"
+  },
+  {
+   "fieldname": "fetched_on",
+   "fieldtype": "Datetime",
+   "label": "Fetched On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "vehicle_section",
+   "fieldtype": "Section Break",
+   "label": "Vehicle"
+  },
+  {
+   "fieldname": "plate_text",
+   "fieldtype": "Data",
+   "label": "Plate",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "As printed on the portal"
+  },
+  {
+   "fieldname": "vehicle",
+   "fieldtype": "Link",
+   "label": "Vehicle",
+   "options": "Rental Vehicle"
+  },
+  {
+   "fieldname": "tag_number",
+   "fieldtype": "Data",
+   "label": "Tag Number"
+  },
+  {
+   "fieldname": "gate_section",
+   "fieldtype": "Section Break",
+   "label": "Gate"
+  },
+  {
+   "fieldname": "gate",
+   "fieldtype": "Data",
+   "label": "Gate"
+  },
+  {
+   "fieldname": "direction",
+   "fieldtype": "Data",
+   "label": "Direction"
+  },
+  {
+   "fieldname": "column_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "toll_schedule",
+   "fieldtype": "Data",
+   "label": "Toll Schedule",
+   "description": "Portal label, e.g. Mon-Sat, Low-Peak"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-10 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Transport",
+ "name": "Toll Crossing",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "delete": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "role": "System Manager"
+  },
+  {
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "role": "Transport Accounts"
+  },
+  {
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "role": "Transport Operations"
+  }
+ ],
+ "sort_field": "crossed_on",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "plate_text"
+}
