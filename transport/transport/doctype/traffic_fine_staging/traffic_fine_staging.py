@@ -231,6 +231,31 @@ class TrafficFineStaging(Document):
 
 		self.db_set({"black_points_applied": 1, "driver_incident": incident.name})
 
+	def responsible_party(self):
+		"""Who answers for this fine, as (DocType, name) for the invoice, or (None, None).
+
+		`responsibility` says only Driver, Company or Customer; the invoice needs a
+		real party to point at, and a Driver is not one - the accounting side deals
+		in Employees and Suppliers. A Driver with an Employee is that Employee. One
+		without, but with a `transporter`, is an outside-hired driver and is
+		recorded against that Supplier. A Driver with neither, or a fine whose
+		chosen side has nothing filled in, gets no party at all rather than a
+		guess: a blank is visibly unassigned, a wrong name looks settled.
+		"""
+		if self.responsibility == "Driver" and self.driver:
+			employee, transporter = frappe.db.get_value(
+				"Driver", self.driver, ["employee", "transporter"]
+			) or (None, None)
+			if employee:
+				return "Employee", employee
+			if transporter:
+				return "Supplier", transporter
+		elif self.responsibility == "Customer" and self.customer:
+			return "Customer", self.customer
+		elif self.responsibility == "Company" and self.owning_company:
+			return "Company", self.owning_company
+		return None, None
+
 	@frappe.whitelist()
 	def create_purchase_invoice(self):
 		"""Raise the Draft invoice that pays this fine.
@@ -267,9 +292,13 @@ class TrafficFineStaging(Document):
 				title=_("Item Missing"),
 			)
 
+		responsible_type, responsible = self.responsible_party()
+
 		invoice = frappe.get_doc({
 			"doctype": "Purchase Invoice",
 			"supplier": supplier,
+			"custom_fine_responsible_type": responsible_type,
+			"custom_fine_responsible": responsible,
 			# The fine, as a link. Every other portal detail on the invoice
 			# fetches through this one field, so the invoice cannot end up
 			# disagreeing with the fine it was raised from.

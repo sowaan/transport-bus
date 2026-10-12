@@ -1,5 +1,5 @@
 // GENERATED FILE - DO NOT EDIT BY HAND.
-// Generated 2026-10-10 from darb.py, rakta.py, rta.py, salik.py, tamm.py
+// Generated 2026-10-11 from asateel.py, darb.py, rakta.py, rta.py, salik.py, tamm.py
 // by extension/tools/generate_extractors.py. Change the constants in those
 // Python modules and re-run the generator; edits made here are lost and,
 // worse, silently diverge from what the server-side fetcher reads.
@@ -13,6 +13,70 @@
 // regeneration away from reaching the other.
 
 globalThis.PORTAL_EXTRACTORS = {
+
+	// from asateel.py
+	asateel: {
+
+		// EXTRACT_ROWS_JS
+		extractRows: () => {
+	// The vehicles table, not any other table the app may add to the page.
+	const table = document.querySelector('.v-data-table table');
+	if (!table) return null;
+
+	const text = (el) => (el ? el.textContent : '').replace(/\s+/g, ' ').trim();
+
+	const HEADERS = ['Vehicle Details', 'Traffic Code', 'Vehicle Type Name', 'Business Domain', 'Permit Validity', 'Vehicle Status'];
+
+	// Cell 0 is the select checkbox. The label is in .header-text; the th's own
+	// text also carries a sort icon's ligature name.
+	const head = [...table.querySelectorAll('thead th')].slice(1, 1 + HEADERS.length)
+		.map((th) => text(th.querySelector('.header-text') || th));
+	const headOk = head.length === HEADERS.length && HEADERS.every((h, i) => head[i] === h);
+
+	const rows = [];
+	for (const tr of table.querySelectorAll('tbody tr')) {
+		// An expandable table may interleave detail rows, and an empty one shows a
+		// single full-width message. Neither is a vehicle.
+		if ((tr.className || '').includes('expanded')) continue;
+		const cells = [...tr.children];
+		if (cells.length === 1 && cells[0].hasAttribute('colspan')) continue;
+
+		const plate = cells[1] || null;
+		const state = plate ? plate.querySelector('.plate-number--state') : null;
+		const number = plate ? plate.querySelector('.plate-number--number') : null;
+		// The emirate is the other cell of the plate's top line, beside the category.
+		const top = state ? state.parentElement : null;
+		const emirate = top ? [...top.children].find((c) => c !== state) : null;
+
+		const row = {
+			_emirate: text(emirate),
+			_code: text(state),
+			_number: text(number),
+			_traffic_code: text(cells[2]),
+			_type: text(cells[3]),
+			_domain: text(cells[4]),
+			_permit: text(cells[5]),
+			_status: text(cells[6]),
+		};
+		// False when the row cannot be trusted by position: too few cells, or no
+		// plate or traffic code to say which vehicle it is.
+		row._ok = headOk && cells.length >= 8 && !!(row._emirate && row._code && row._number) &&
+			/^\d+$/.test(row._traffic_code);
+		rows.push(row);
+	}
+	return rows;
+},
+
+		// NEXT_PAGE_JS
+		nextPage: () => {
+	const pager = document.querySelector('ul.pagination');
+	if (!pager) return false;
+	const next = pager.querySelector('button[aria-label="Go to next page"]');
+	if (!next || next.disabled || next.getAttribute('aria-disabled') === 'true') return false;
+	next.click();
+	return true;
+},
+	},
 
 	// from darb.py
 	darb: {
@@ -406,6 +470,7 @@ globalThis.PORTAL_EXTRACTORS = {
 };
 
 globalThis.PORTAL_ORIGINS = {
+ "asateel": "https://asateelplus.itc.gov.ae",
  "darb": "https://darb.qmobility.ae",
  "rakta": "https://smart.rakta.gov.ae",
  "rta": "https://ums.rta.ae",

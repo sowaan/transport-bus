@@ -11,6 +11,7 @@ them, and adding another northern-emirate police force needs no new code.
 import frappe
 from frappe import _
 
+from transport.transport.fine_sync.portals.asateel import AsateelPermitReader
 from transport.transport.fine_sync.portals.darb import DarbFetcher
 from transport.transport.fine_sync.portals.moi import MoiFetcher
 from transport.transport.fine_sync.portals.rakta import RaktaFetcher
@@ -70,6 +71,19 @@ FETCHERS_BY_KEY = {
 CROSSING_READERS_BY_KEY = {
 	"salik": SalikTripsReader,
 }
+
+
+# Portals the extension reads that list neither fines nor tolls but the fleet's
+# PERMITS. Same reasoning as above: none of these is a FineFetcher, and none can
+# be reached from `get_fetcher`.
+PERMIT_READERS_BY_KEY = {
+	"asateel": AsateelPermitReader,
+}
+
+
+def permit_reader_for(portal):
+	"""The reader class for a portal that lists vehicle permits, or None."""
+	return PERMIT_READERS_BY_KEY.get((portal.get("fetcher_key") or "").strip().lower())
 
 
 def crossing_reader_for(portal):

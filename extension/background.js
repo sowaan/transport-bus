@@ -22,6 +22,15 @@ const INGEST_METHOD = "transport.transport.fine_sync.service.ingest_client_fetch
 // Toll crossings are charges, not fines, and the fines endpoint invoices what it
 // stages. A portal whose target says kind "crossings" posts here instead.
 const INGEST_CROSSINGS_METHOD = "transport.transport.fine_sync.service.ingest_client_crossings";
+// A permit registry (Asateel) is neither: its rows set a permit expiry on each
+// vehicle. Its target says kind "permits".
+const INGEST_PERMITS_METHOD = "transport.transport.fine_sync.service.ingest_client_permits";
+
+// What each non-fines kind of portal posts to, and what it calls its rows.
+const KINDS = {
+	crossings: { method: INGEST_CROSSINGS_METHOD, noun: "toll crossing(s)" },
+	permits: { method: INGEST_PERMITS_METHOD, noun: "vehicle(s)" },
+};
 const TARGET_METHOD = "transport.transport.fine_sync.service.get_client_fetch_target";
 
 // Matches the server's sign-in window. A push notification approved on a phone
@@ -358,8 +367,8 @@ async function runFetch(request, deskTabId, erpOrigin) {
 			return { ok: false, message: describeReadFailure(read && read.state, target) };
 		}
 
-		const crossings = target.kind === "crossings";
-		const noun = crossings ? "toll crossing(s)" : "fine(s)";
+		const kind = KINDS[target.kind] || { method: INGEST_METHOD, noun: "fine(s)" };
+		const noun = kind.noun;
 
 		progress(
 			deskTabId,
@@ -375,7 +384,7 @@ async function runFetch(request, deskTabId, erpOrigin) {
 			portal,
 			rows: read.rows,
 			truncated: read.truncated,
-			method: crossings ? INGEST_CROSSINGS_METHOD : INGEST_METHOD,
+			method: kind.method,
 		});
 
 		if (await settings.closeTabWhenDone()) {
@@ -415,6 +424,15 @@ function describeReadFailure(state, target) {
 		}
 		if (state === "no-table") {
 			return "Signed in, but the Salik transactions table never appeared. Nothing was read - if the page looks normal in the tab, press the button again.";
+		}
+	}
+	// The Asateel permit registry signs in on its own page, not through UAE Pass.
+	if (target && target.kind === "permits") {
+		if (state === "not-signed-in") {
+			return "The Asateel sign-in was not completed, so there was nothing to read. Sign in to your Asateel account in the tab, then press the button again.";
+		}
+		if (state === "no-table") {
+			return "Signed in, but the Asateel vehicles table never appeared. Nothing was read - if the page looks normal in the tab, press the button again.";
 		}
 	}
 	if (state === "not-signed-in") {

@@ -16,7 +16,8 @@
     "https://ums.rta.ae/*",
     "https://smart.rakta.gov.ae/*",
     "https://darb.qmobility.ae/*",
-    "https://customers.salik.ae/*"
+    "https://customers.salik.ae/*",
+    "https://asateelplus.itc.gov.ae/*"
   ],
   "background": {
     "service_worker": "background.js"

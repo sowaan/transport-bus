@@ -35,6 +35,7 @@ from transport.transport.fine_sync.registry import (
 	fetcher_class_for,
 	get_fetcher,
 	is_supported,
+	permit_reader_for,
 )
 from transport.transport.vehicle_plate import PLATE_FIELDS, normalize_emirate
 
@@ -858,6 +859,10 @@ MAX_CLIENT_FETCH_ROWS = 5000
 # thousand. Twice that is a cap no honest read reaches.
 MAX_CLIENT_CROSSING_ROWS = 2000
 
+# One row per vehicle, ten a page. A fleet of two thousand vehicles is far past
+# any this app serves.
+MAX_CLIENT_PERMIT_ROWS = 2000
+
 
 def _client_fetch_target(fetcher, portal_doc, traffic_file_number):
 	"""Where the extension should navigate, or a refusal that says why.
@@ -947,6 +952,11 @@ def get_client_fetch_target(portal):
 	crossing_reader = crossing_reader_for(portal_doc)
 	if crossing_reader:
 		return {**crossing_reader.client_fetch_target(), "kind": "crossings"}
+
+	# Likewise a permit registry: its rows are not fines either.
+	permit_reader = permit_reader_for(portal_doc)
+	if permit_reader:
+		return {**permit_reader.client_fetch_target(), "kind": "permits"}
 
 	# The traffic file number is read here but not returned. TAMM carries the
 	# fleet in a query parameter, so its fetcher builds it into the URL; a
@@ -1100,6 +1110,31 @@ def ingest_client_fetch(portal, rows, truncated=0, fetched_at=None):
 	}
 
 
+def _client_rows(rows, cap):
+	"""The rows a browser posted, as a list of dicts, or a refusal that says why.
+
+	They arrive from the operator's browser and are checked as untrusted: JSON
+	text or a list, no more than `cap` of them, every one an object.
+	"""
+	if isinstance(rows, str):
+		try:
+			rows = json.loads(rows)
+		except ValueError:
+			frappe.throw(_("Rows were not valid JSON."), title=_("Malformed Fetch"))
+	if not isinstance(rows, list):
+		frappe.throw(_("Rows must be a list."), title=_("Malformed Fetch"))
+	if len(rows) > cap:
+		frappe.throw(
+			_("This batch carries {0} rows, past the {1} a single fetch may post.").format(
+				len(rows), cap
+			),
+			title=_("Batch Too Large"),
+		)
+	if any(not isinstance(row, dict) for row in rows):
+		frappe.throw(_("Every row must be an object."), title=_("Malformed Fetch"))
+	return rows
+
+
 @frappe.whitelist(methods=["POST"])
 def ingest_client_crossings(portal, rows, truncated=0, fetched_at=None):
 	"""Store toll crossings the operator's browser read from the portal.
@@ -1131,22 +1166,7 @@ def ingest_client_crossings(portal, rows, truncated=0, fetched_at=None):
 			title=_("Portal Not Supported"),
 		)
 
-	if isinstance(rows, str):
-		try:
-			rows = json.loads(rows)
-		except ValueError:
-			frappe.throw(_("Rows were not valid JSON."), title=_("Malformed Fetch"))
-	if not isinstance(rows, list):
-		frappe.throw(_("Rows must be a list."), title=_("Malformed Fetch"))
-	if len(rows) > MAX_CLIENT_CROSSING_ROWS:
-		frappe.throw(
-			_("This batch carries {0} rows, past the {1} a single fetch may post.").format(
-				len(rows), MAX_CLIENT_CROSSING_ROWS
-			),
-			title=_("Batch Too Large"),
-		)
-	if any(not isinstance(row, dict) for row in rows):
-		frappe.throw(_("Every row must be an object."), title=_("Malformed Fetch"))
+	rows = _client_rows(rows, MAX_CLIENT_CROSSING_ROWS)
 
 	truncated = bool(int(truncated or 0))
 
@@ -1206,6 +1226,169 @@ def ingest_client_crossings(portal, rows, truncated=0, fetched_at=None):
 		)
 
 	return {"staged": stored, "already": already, "truncated": truncated, "message": message}
+
+
+@frappe.whitelist(methods=["POST"])
+def ingest_client_permits(portal, rows, truncated=0, fetched_at=None):
+	"""Record the permit expiry dates the operator's browser read from Asateel.
+
+	**This writes no fines and no charges.** What it does write is one field per
+	vehicle, `Rental Vehicle.asateel_permit_expiry`, and then asks the Compliance
+	Document sync to carry it - the same route a date typed on the vehicle form
+	takes, so the reminders read one record whichever way it got there.
+
+	Conservative by design, because this edits master data from a page the
+	operator is trusting to be right:
+
+	* **Only ever forward.** A portal date is applied when the vehicle has none or
+	  an earlier one. A portal date EARLIER than the one recorded is reported, not
+	  applied - a renewal entered by hand must not be rolled back by a stale page.
+	* **"No Active Permit" clears nothing.** It is counted and reported; removing a
+	  recorded expiry on the strength of a list is not this endpoint's call.
+	* **A wording nobody has seen** (an expired permit is the likely one) is
+	  reported verbatim and never turned into a date.
+	* **A vehicle is applied only when exactly one fleet vehicle has that plate.**
+	  No match, or an ambiguous one, is listed for a person.
+	* All rows are parsed before any vehicle is touched, and each vehicle's change
+	  is its own savepoint, so one that fails does not take the others with it.
+	"""
+	portal_doc = _client_fetch_portal(portal)
+
+	reader = permit_reader_for(portal_doc)
+	if not reader:
+		frappe.throw(
+			_("{0} does not list vehicle permits. Its rows cannot be stored here.").format(
+				portal_doc.name
+			),
+			title=_("Portal Not Supported"),
+		)
+
+	rows = _client_rows(rows, MAX_CLIENT_PERMIT_ROWS)
+	truncated = bool(int(truncated or 0))
+
+	permits = []
+	for number, row in enumerate(rows, start=1):
+		try:
+			permits.append(reader.to_permit(row))
+		except ValueError as exc:
+			frappe.throw(
+				_("Row {0} could not be read ({1}). Nothing was changed - the page has probably "
+				  "changed.").format(number, exc),
+				title=_("Malformed Fetch"),
+			)
+
+	# A vehicle can be listed once per business domain. Its permit is the latest
+	# active one; if none is active, what it says instead.
+	vehicles = {}
+	for permit in permits:
+		key = (permit["emirate"], permit["plate_code"], permit["plate_number"])
+		entry = vehicles.setdefault(key, {"expiry": None, "none": 0, "other": []})
+		if permit["permit"] == "active":
+			if not entry["expiry"] or permit["expiry_date"] > entry["expiry"]:
+				entry["expiry"] = permit["expiry_date"]
+		elif permit["permit"] == "none":
+			entry["none"] += 1
+		else:
+			entry["other"].append(permit["permit_text"])
+
+	updated, unchanged, no_permit = 0, 0, 0
+	unmatched, earlier, other, failed = [], [], [], []
+
+	def printed(key):
+		return " ".join(part for part in key if part)
+
+	for key, entry in vehicles.items():
+		vehicle = _vehicle_for_plate(key[1], key[2], key[0])
+		if not vehicle:
+			unmatched.append(printed(key))
+			continue
+
+		if entry["other"] and not entry["expiry"]:
+			other.append(f"{printed(key)}: {entry['other'][0]}")
+			continue
+		if not entry["expiry"]:
+			no_permit += 1
+			continue
+
+		current = frappe.db.get_value("Rental Vehicle", vehicle.name, "asateel_permit_expiry")
+		portal_expiry = frappe.utils.getdate(entry["expiry"])
+		if current and frappe.utils.getdate(current) == portal_expiry:
+			unchanged += 1
+			continue
+		if current and frappe.utils.getdate(current) > portal_expiry:
+			earlier.append(printed(key))
+			continue
+
+		savepoint = "asateel_permit"
+		frappe.db.savepoint(savepoint)
+		try:
+			frappe.db.set_value(
+				"Rental Vehicle", vehicle.name, "asateel_permit_expiry", portal_expiry
+			)
+			# Imported here: it is the Compliance Document sync's own module, and a
+			# failure inside it is this vehicle's failure, not the whole read's.
+			from transport.transport.compliance_sync import upsert_compliance_document
+
+			upsert_compliance_document(
+				"Rental Vehicle",
+				vehicle.name,
+				"Asateel Permit",
+				portal_expiry,
+				document_number=frappe.db.get_value(
+					"Rental Vehicle", vehicle.name, "asateel_permit_number"
+				),
+				update=True,
+			)
+			frappe.get_doc("Rental Vehicle", vehicle.name).add_comment(
+				"Info",
+				_("Asateel permit expiry set to {0} from the Asateel portal (was {1}).").format(
+					portal_expiry, current or _("blank")
+				),
+			)
+			updated += 1
+		except Exception:
+			frappe.db.rollback(save_point=savepoint)
+			failed.append(printed(key))
+			frappe.log_error(
+				title="Asateel permit sync failed",
+				message=f"Could not record the permit for {vehicle.name}.\n{frappe.get_traceback()}",
+			)
+		if updated and updated % 50 == 0:
+			_checkpoint()
+	_checkpoint()
+
+	def listed(items, limit=10):
+		shown = ", ".join(items[:limit])
+		return shown + (_(" and {0} more").format(len(items) - limit) if len(items) > limit else "")
+
+	parts = [
+		_("{0} vehicle(s) read: {1} permit expiry date(s) recorded, {2} already up to date, {3} with no active permit.").format(
+			len(vehicles), updated, unchanged, no_permit
+		)
+	]
+	if unmatched:
+		parts.append(_("Not matched to a fleet vehicle ({0}): {1}.").format(len(unmatched), listed(unmatched)))
+	if earlier:
+		parts.append(
+			_("Left alone because the vehicle already has a later date ({0}): {1}.").format(
+				len(earlier), listed(earlier)
+			)
+		)
+	if other:
+		parts.append(_("Permit wording not recognised ({0}): {1}.").format(len(other), listed(other)))
+	if failed:
+		parts.append(_("Could not be recorded ({0}): {1}. See the Error Log.").format(len(failed), listed(failed)))
+	if truncated:
+		parts.append(
+			_("The browser stopped before the end of the list, so these are some of the vehicles and not all of them.")
+		)
+
+	return {
+		"staged": updated,
+		"already": unchanged,
+		"truncated": truncated,
+		"message": " ".join(parts),
+	}
 
 
 def _vehicle_for_printed_plate(plate_text):
