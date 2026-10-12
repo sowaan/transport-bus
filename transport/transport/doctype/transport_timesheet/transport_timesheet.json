@@ -14,6 +14,10 @@
   "period_from",
   "period_to",
   "status",
+  "fleet_section",
+  "driver_names",
+  "column_break_fleet",
+  "vehicle_details",
   "vehicle_deployment_section",
   "monthly_deployments",
   "trips_section",
@@ -26,6 +30,7 @@
   "total_ot_trips",
   "total_ot_hours",
   "total_additional_trips",
+  "total_round_trips",
   "total_hours",
   "holiday_totals_section",
   "total_weekend_days",
@@ -34,6 +39,8 @@
   "column_break_holiday",
   "total_public_holiday_days",
   "total_public_holiday_trips",
+  "total_saturday_trips",
+  "total_sunday_trips",
   "total_public_holiday_hours",
   "operations_section",
   "operations_approved_by",
@@ -302,11 +309,53 @@
    "fieldtype": "Table",
    "label": "Monthly Deployments",
    "options": "Transport Vehicle Deployment"
+  },
+  {
+   "fieldname": "fleet_section",
+   "fieldtype": "Section Break",
+   "label": "Drivers & Vehicles"
+  },
+  {
+   "description": "Every driver who ran a trip on this timesheet. Filled when it is saved.",
+   "fieldname": "driver_names",
+   "fieldtype": "Small Text",
+   "label": "Drivers",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_fleet",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Plate, type and seating of every vehicle used.",
+   "fieldname": "vehicle_details",
+   "fieldtype": "Small Text",
+   "label": "Vehicles",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_saturday_trips",
+   "fieldtype": "Int",
+   "label": "Saturday Trips",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_sunday_trips",
+   "fieldtype": "Int",
+   "label": "Sunday Trips",
+   "read_only": 1
+  },
+  {
+   "description": "A pickup and its drop. Below the Transport Settings threshold (10) the period is billed per trip.",
+   "fieldname": "total_round_trips",
+   "fieldtype": "Int",
+   "label": "Round Trips",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-09-27 18:54:29.846430",
+ "modified": "2026-10-11 22:00:00.000000",
  "modified_by": "Administrator",
  "module": "Transport",
  "name": "Transport Timesheet",

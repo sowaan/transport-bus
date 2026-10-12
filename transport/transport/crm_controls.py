@@ -108,3 +108,26 @@ def notify_operations_on_sales_order(doc, method=None):
 		reference_doctype="Sales Order",
 		reference_name=doc.name,
 	)
+
+
+def require_budget_for_transport_order(doc, method=None):
+	"""Source doc, Mandatory System Controls: "Budget mandatory in Sales order".
+
+	Off unless Transport Settings turns it on - a transport project needs an
+	approved Budget to exist before this can pass, and switching it on for a site
+	that has none would stop every order. Only transport orders: Sales Order is
+	shared with the group's other companies, whose orders have no project budget
+	to demand."""
+	if not doc.get("transport_project"):
+		return
+	if not frappe.db.get_single_value("Transport Settings", "require_budget_on_sales_order"):
+		return
+
+	project = doc.get("project") or doc.transport_project
+	if frappe.db.exists("Budget", {"budget_against": "Project", "project": project, "docstatus": 1}):
+		return
+
+	frappe.throw(
+		_("Project {0} has no approved Budget. Create and submit one before this Sales Order is submitted.").format(project),
+		title=_("Budget required"),
+	)

@@ -1,0 +1,47 @@
+{
+ "cards": [
+  {
+   "card": "Trips Today"
+  },
+  {
+   "card": "Drivers Busy Today"
+  },
+  {
+   "card": "Drivers Available Today"
+  },
+  {
+   "card": "Vehicles Busy Today"
+  },
+  {
+   "card": "Vehicles Available Today"
+  },
+  {
+   "card": "Trips Not Accepted"
+  },
+  {
+   "card": "Delayed Trips"
+  },
+  {
+   "card": "Expenses Pending Approval"
+  },
+  {
+   "card": "Open Customer Requests"
+  },
+  {
+   "card": "Open Transport Requests"
+  }
+ ],
+ "charts": [],
+ "creation": "2026-10-11 22:00:00.000000",
+ "dashboard_name": "Transport Operations",
+ "docstatus": 0,
+ "doctype": "Dashboard",
+ "idx": 0,
+ "is_default": 0,
+ "is_standard": 1,
+ "modified": "2026-10-11 22:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Transport",
+ "name": "Transport Operations",
+ "owner": "Administrator"
+}

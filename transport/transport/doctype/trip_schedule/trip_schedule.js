@@ -48,7 +48,13 @@ frappe.ui.form.on("Trip Schedule", {
 									result.created,
 									result.from_date,
 									result.to_date,
-								]),
+								]) +
+									(result.unassigned
+										? "<br>" +
+										  __("{0} of them could not take the default vehicle / driver (already booked or not available) and were left unassigned.", [
+												result.unassigned,
+										  ])
+										: ""),
 						});
 					});
 				},

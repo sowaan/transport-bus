@@ -6,11 +6,14 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.utils import flt, get_datetime, now_datetime, time_diff_in_hours
 
-from transport.transport.utils import check_sales_order_exists, is_project_holiday
+from transport.transport.utils import check_sales_order_exists, get_project_places, is_project_holiday
 
 LMV_LABEL = "LMV (Light Motor Vehicle)"
 HMV_LABEL = "HMV (Heavy Motor Vehicle)"
 
+
+# From here on a Trip has been taken on by a driver, so it must name one and a vehicle.
+COMMITTED_STATUSES = ("Accepted", "Started", "Completed", "Approved")
 
 # Nothing has run yet at these statuses, so an actual start or end stamp on a
 # Trip sitting at one of them cannot be a real observation.
@@ -24,10 +27,14 @@ class Trip(Document):
 		self.check_sales_order()
 		self.set_route_endpoints()
 		self.sync_stops_with_endpoints()
+		self.apply_default_driver()
+		self.check_assignment_complete()
+		self.check_places_within_project()
 		self.check_double_booking()
 		self.check_blacklisted_driver()
 		self.set_duty_type()
 		self.set_assigned()
+		self.set_trip_title()
 
 	def clear_unstarted_actuals(self):
 		"""Drop the driver's start/end stamps until the trip has actually begun.
@@ -64,6 +71,76 @@ class Trip(Document):
 
 		if self.stops[0].scheduled_time:
 			self.scheduled_time = self.stops[0].scheduled_time
+
+	def apply_default_driver(self):
+		"""Source doc, Sales Order to Project: "Vehicle allocation to driver
+		needed at the time of new trip". A Trip that names a vehicle but no
+		driver takes the driver allocated to that vehicle - on the Project first,
+		then on the vehicle itself. A driver already chosen is never replaced."""
+		if self.driver or not self.vehicle:
+			return
+
+		self.driver = default_driver_for_vehicle(self.vehicle, self.project, self.shift)
+
+	def check_assignment_complete(self):
+		"""Source doc, Mandatory System Controls: "Driver mandatory. Vehicle
+		mandatory." A Trip can be planned without either, but it cannot be
+		accepted, started or closed without both. Checked when the status moves,
+		so an old record is not blocked for an unrelated edit."""
+		if self.status in COMMITTED_STATUSES and (self.is_new() or self.has_value_changed("status")):
+			if not (self.driver and self.vehicle):
+				frappe.throw(
+					_("A Trip needs both a Driver and a Vehicle before it can be {0}.").format(self.status),
+					title=_("Driver and Vehicle required"),
+				)
+
+	def check_places_within_project(self):
+		"""Source doc, Mandatory System Controls: "Non usage of vehicle for any
+		location not in the project." A Trip may only run between places its
+		Project knows - its routes' ends and its shift pickup/drop points. Nothing to compare against if the Project has
+		described no places yet, and it can be switched off in Transport Settings
+		for a project that genuinely roams."""
+		if not frappe.db.get_single_value("Transport Settings", "restrict_trip_places_to_project"):
+			return
+		if not self.project:
+			return
+
+		# A Trip with stops is a shuttle collecting from pickup points the customer
+		# names - often not places the Project has on file, and not master data. Its
+		# from/to are just the first and last stop, so there is nothing of the
+		# Project's to hold it to; the control applies to trips with plain endpoints.
+		if self.stops:
+			return
+
+		unchanged = (
+			not self.is_new()
+			and not self.has_value_changed("project")
+			and not self.has_value_changed("from_place")
+			and not self.has_value_changed("to_place")
+		)
+		if unchanged:
+			return
+
+		allowed = get_project_places(self.project)
+		if not allowed:
+			return
+
+		used = {self.from_place, self.to_place}
+		outside = sorted(place for place in used if place and place not in allowed)
+		if outside:
+			frappe.throw(
+				_("{0} is not a location of Project {1}. Add it to one of the Project's routes or shift "
+				  "terms, or switch off \"Keep Trips Within the Project's Locations\" in Transport "
+				  "Settings.").format(", ".join(outside), self.project),
+				title=_("Location not on the project"),
+			)
+
+	def set_trip_title(self):
+		"""A Trip is recognised by where it goes and when, not by TR-TRIP-.... The
+		client's UAT note: "Trip name should come instead of number so that can
+		easily identify". Used as the title field, so lists and Link pickers show
+		it in place of the number."""
+		self.trip_title = build_trip_title(self.from_place, self.to_place, self.trip_date, self.direction)
 
 	def check_sales_order(self):
 		"""Only on creation, or if the Project is being changed - so switching
@@ -145,10 +222,28 @@ class Trip(Document):
 			self.duty_type = "OT"
 			return
 
-		if (frappe.db.get_single_value("Transport Settings", "ot_basis") or "Trips") == "Hours":
+		if self.get_duty_basis() == "Hours":
 			self.set_duty_type_by_hours()
 		else:
 			self.set_duty_type_by_trip_count()
+
+	def get_duty_basis(self):
+		"""Hours or Trips. The Project says which applies to its drivers (the
+		client's UAT note: overtime is trips-based for some contracts and
+		hours-based for others); a Project that doesn't say follows the site-wide
+		Transport Settings choice, which is what every Trip did before."""
+		basis = self.project and frappe.db.get_value("Project", self.project, "transport_duty_basis")
+		if basis == "Hour Basis":
+			return "Hours"
+		if basis == "Trip Basis":
+			return "Trips"
+		return frappe.db.get_single_value("Transport Settings", "ot_basis") or "Trips"
+
+	def get_daily_hours_limit(self):
+		"""Hours before overtime starts: the Project's own limit (10 or 12
+		depending on the contract), else the Transport Settings default."""
+		project_limit = self.project and frappe.db.get_value("Project", self.project, "transport_daily_hours_limit")
+		return flt(project_limit) or flt(frappe.db.get_single_value("Transport Settings", "daily_working_hours"))
 
 	def set_duty_type_by_hours(self):
 		"""The client's driver-contract sheet defines overtime by hours worked
@@ -164,7 +259,7 @@ class Trip(Document):
 			self.duty_type = "Duty"
 			return
 
-		threshold = flt(frappe.db.get_single_value("Transport Settings", "daily_working_hours"))
+		threshold = self.get_daily_hours_limit()
 		if not threshold:
 			self.duty_type = "Duty"
 			return
@@ -235,6 +330,53 @@ class Trip(Document):
 	def get_daily_trip_limit(self):
 		settings_field = "hmv_daily_trip_limit" if self.vehicle_class == HMV_LABEL else "lmv_daily_trip_limit"
 		return frappe.db.get_single_value("Transport Settings", settings_field)
+
+
+def build_trip_title(from_place, to_place, trip_date, direction):
+	parts = [f"{from_place or '?'} \u2192 {to_place or '?'}"]
+	if trip_date:
+		parts.append(str(trip_date))
+	if direction:
+		parts.append(direction)
+	return " \u00b7 ".join(parts)[:140]
+
+
+@frappe.whitelist()
+def default_driver_for_vehicle(vehicle, project=None, shift=None):
+	"""The driver normally allocated to `vehicle`, or None.
+
+	Order of preference: a row for this vehicle on the Project (a row for the
+	Trip's own shift before one with no shift; a row for a different shift is
+	ignored), then the Assigned Driver on the vehicle. A driver who is not Active
+	or is blacklisted is skipped - suggesting one would only fail the Trip's own
+	validation a moment later."""
+	if not vehicle:
+		return None
+
+	frappe.has_permission("Trip", "read", throw=True)
+
+	candidates = []
+	if project:
+		rows = frappe.get_all(
+			"Transport Project Vehicle",
+			filters={"parent": project, "parenttype": "Project", "vehicle": vehicle, "driver": ("is", "set")},
+			fields=["driver", "shift"],
+			order_by="idx",
+		)
+		rows = [r for r in rows if not (shift and r.shift and r.shift != shift)]
+		rows.sort(key=lambda r: 0 if (shift and r.shift == shift) else 1)
+		candidates.extend(r.driver for r in rows)
+
+	assigned = frappe.db.get_value("Rental Vehicle", vehicle, "assigned_driver")
+	if assigned:
+		candidates.append(assigned)
+
+	for driver in candidates:
+		state = frappe.db.get_value("Driver", driver, ["status", "is_blacklisted"], as_dict=True)
+		if state and state.status == "Active" and not state.is_blacklisted:
+			return driver
+
+	return None
 
 
 def recalculate_after_actuals(trip_name):

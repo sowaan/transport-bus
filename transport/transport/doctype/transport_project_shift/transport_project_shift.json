@@ -7,6 +7,20 @@
  "engine": "InnoDB",
  "field_order": [
   "shift",
+  "trips_per_day",
+  "seating_capacity",
+  "vehicle_category",
+  "column_break_vehicle",
+  "vehicle_source",
+  "project_value_per_month",
+  "route_section",
+  "from_place",
+  "to_place",
+  "pickup_time",
+  "column_break_route",
+  "drop_time",
+  "weekend_off_day",
+  "terms_section",
   "weekend_payment",
   "public_holiday_payment",
   "salik_darb",
@@ -24,7 +38,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Shift",
-   "options": "Morning\nAfternoon\nEvening",
+   "options": "Morning\nAfternoon\nEvening\nNight",
    "reqd": 1
   },
   {
@@ -95,12 +109,91 @@
    "fieldtype": "Select",
    "label": "Driver Accommodation",
    "options": "\nIncluding\nExcluding"
+  },
+  {
+   "description": "Per vehicle, on this shift. The overtime rule counts trips past the driver's limit.",
+   "fieldname": "trips_per_day",
+   "fieldtype": "Int",
+   "label": "Trips per Day",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "seating_capacity",
+   "fieldtype": "Select",
+   "label": "Vehicle Seating",
+   "options": "\n5\n7\n9\n12\n13\n14\n26\n33\n34\n55\n65\n66"
+  },
+  {
+   "fieldname": "vehicle_category",
+   "fieldtype": "Select",
+   "label": "Vehicle Category",
+   "options": "\nPassenger\nGoods\nDouble Cabin"
+  },
+  {
+   "fieldname": "column_break_vehicle",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Where the vehicle for this shift comes from.",
+   "fieldname": "vehicle_source",
+   "fieldtype": "Select",
+   "label": "Vehicle Source",
+   "options": "\nCompany-Owned\nExternal Supplier - With Driver\nExternal Supplier - Without Driver"
+  },
+  {
+   "fieldname": "project_value_per_month",
+   "fieldtype": "Currency",
+   "label": "Project Value per Month"
+  },
+  {
+   "fieldname": "route_section",
+   "fieldtype": "Section Break",
+   "label": "Route & Timing"
+  },
+  {
+   "fieldname": "from_place",
+   "fieldtype": "Link",
+   "label": "From",
+   "options": "Place"
+  },
+  {
+   "fieldname": "to_place",
+   "fieldtype": "Link",
+   "label": "To",
+   "options": "Place"
+  },
+  {
+   "description": "As written on the project sheet, e.g. \"6.00 AM\".",
+   "fieldname": "pickup_time",
+   "fieldtype": "Data",
+   "label": "Pickup Time"
+  },
+  {
+   "fieldname": "column_break_route",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "As written on the project sheet, e.g. \"5.00 PM\".",
+   "fieldname": "drop_time",
+   "fieldtype": "Data",
+   "label": "Drop Time"
+  },
+  {
+   "fieldname": "weekend_off_day",
+   "fieldtype": "Select",
+   "label": "Weekend Off Day",
+   "options": "\nSaturday and Sunday\nSunday\nSaturday\nFriday\nNo Weekend Off"
+  },
+  {
+   "fieldname": "terms_section",
+   "fieldtype": "Section Break",
+   "label": "Including / Excluding Terms"
   }
  ],
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-08-24 15:00:00.000000",
+ "modified": "2026-10-11 22:00:00.000000",
  "modified_by": "Administrator",
  "module": "Transport",
  "name": "Transport Project Shift",

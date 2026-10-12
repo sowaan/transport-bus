@@ -30,7 +30,44 @@ def approve_trip(trip_name):
 		frappe.throw(_("Only Completed trips can be approved (current status: {0}).").format(trip.status))
 
 	trip.db_set({"status": "Approved", "approved_by": frappe.session.user, "approved_on": now_datetime()})
+	create_timesheet_for_approved_trip(trip)
 	return "Approved"
+
+
+def create_timesheet_for_approved_trip(trip):
+	"""Source doc, Transport Timesheet: "Once the trip is approved by the
+	operations in-charge, the timesheet for each project's trips should
+	automatically generate."
+
+	The trip is already Approved by the time this runs, so nothing here may undo
+	that: a failure to build the timesheet is logged and reported, never raised."""
+	from transport.transport.doctype.transport_timesheet.transport_timesheet import ensure_draft_timesheet
+
+	try:
+		result = ensure_draft_timesheet(trip)
+	except Exception:
+		frappe.log_error(title="Auto timesheet failed for Trip " + trip.name, message=frappe.get_traceback())
+		frappe.msgprint(
+			_("Trip approved, but its Timesheet could not be built automatically. Open a Transport "
+			  "Timesheet for {0} and pull the trips in by hand.").format(trip.project),
+			indicator="orange",
+			alert=True,
+		)
+		return None
+
+	if result and result.get("created"):
+		from transport.transport.driver_portal import notify_roles
+
+		notify_roles(
+			("Transport Operations", "Transport In-Charge"),
+			_("Draft Timesheet created - {0}").format(trip.project),
+			_("Approving Trip {0} started a Draft Transport Timesheet ({1}) for {2}. Check it, then send it for approval.").format(
+				trip.name, result["name"], trip.project
+			),
+			"Transport Timesheet",
+			result["name"],
+		)
+	return result
 
 
 @frappe.whitelist()
@@ -142,3 +179,215 @@ def end_trip(trip_name, end_odometer=None, driver_remarks=None):
 	recalculate_after_actuals(trip.name)
 	check_fatigue(trip.driver, trip.trip_date)
 	return "Completed"
+
+
+# --------------------------------------------------------------------------
+# Reallocation, bulk assignment and vehicle suggestion
+# --------------------------------------------------------------------------
+
+# Once a leg has started, who is driving it is history, not a plan - so only a
+# trip that has not begun can be given a different driver or vehicle.
+REALLOCATABLE_STATUSES = ("Draft", "Assigned", "Accepted", "Rejected")
+
+
+def _require_office(action):
+	if not any(role in frappe.get_roles() for role in APPROVER_ROLES):
+		frappe.throw(_("Not permitted to {0}.").format(action), frappe.PermissionError)
+
+
+def _assign(trip, driver=None, vehicle=None, reason=None):
+	"""Give `trip` a different driver and/or vehicle. Saves through validate(),
+	so the double-booking and blacklist checks apply exactly as they do when
+	someone edits the form. Returns what changed."""
+	if trip.status not in REALLOCATABLE_STATUSES:
+		frappe.throw(
+			_("Trip {0} is {1}; only a trip that has not started can be reallocated.").format(
+				trip.name, trip.status
+			)
+		)
+
+	before = (trip.driver, trip.vehicle)
+	if driver:
+		trip.driver = driver
+	if vehicle:
+		trip.vehicle = vehicle
+
+	if (trip.driver, trip.vehicle) == before:
+		return None
+
+	# A new allocation is a fresh offer to the driver: the old acceptance or
+	# rejection no longer applies, and the confirmation clock restarts.
+	if trip.driver and trip.vehicle:
+		trip.status = "Assigned"
+		trip.assigned_on = now_datetime()
+		trip.reminder_sent = 0
+	trip.needs_reallocation = 0
+	trip.rejection_reason = None
+	trip.save()
+
+	trip.add_comment(
+		"Info",
+		_("Reallocated by {0}. Driver: {1} to {2}. Vehicle: {3} to {4}.{5}").format(
+			frappe.session.user,
+			before[0] or _("none"), trip.driver or _("none"),
+			before[1] or _("none"), trip.vehicle or _("none"),
+			(" " + _("Reason: {0}").format(reason)) if reason else "",
+		),
+	)
+
+	from transport.transport.driver_portal import notify_driver
+
+	if before[0] and before[0] != trip.driver:
+		notify_driver(
+			before[0],
+			_("Trip {0} reallocated").format(trip.name),
+			_("You are no longer assigned to {0}.").format(trip.trip_title or trip.name),
+			trip.doctype,
+			trip.name,
+		)
+	if trip.driver and (trip.driver != before[0] or trip.vehicle != before[1]):
+		notify_driver(
+			trip.driver,
+			_("Trip assigned: {0}").format(trip.trip_title or trip.name),
+			_("{0} on {1}, vehicle {2}.").format(trip.trip_title or trip.name, trip.trip_date, trip.vehicle or "-"),
+			trip.doctype,
+			trip.name,
+		)
+
+	return {"driver": (before[0], trip.driver), "vehicle": (before[1], trip.vehicle)}
+
+
+@frappe.whitelist()
+def reallocate_trip(trip_name, driver=None, vehicle=None, reason=None):
+	"""Change the driver and/or vehicle of a trip that is already allocated.
+
+	The client's UAT question: once a driver and vehicle are allocated, "maybe
+	sometimes change the driver or vehicle, in that case how to do". This is how:
+	it re-runs the same checks as editing the form, restarts the driver's
+	confirmation, tells both drivers, and leaves a comment saying who changed
+	what and why - the Trip's version history keeps the before and after."""
+	_require_office(_("reallocate trips"))
+	if not (driver or vehicle):
+		frappe.throw(_("Choose a new driver, a new vehicle, or both."))
+	if not (reason or "").strip():
+		frappe.throw(_("Say why the trip is being reallocated."))
+
+	trip = frappe.get_doc("Trip", trip_name)
+	changed = _assign(trip, driver or None, vehicle or None, reason.strip())
+	if not changed:
+		frappe.throw(_("That is already the driver and vehicle on this trip."))
+	return changed
+
+
+@frappe.whitelist()
+def bulk_assign(trip_names, driver=None, vehicle=None):
+	"""Give several trips the same driver and/or vehicle in one go - the
+	"Assign driver" / "Assign vehicle" quick actions on the Trip list. A trip
+	that cannot take it (already booked, blacklisted driver, already started)
+	is reported and skipped; it never blocks the rest."""
+	_require_office(_("assign trips"))
+	if not (driver or vehicle):
+		frappe.throw(_("Choose a driver, a vehicle, or both."))
+
+	done, failed = [], []
+	for name in frappe.parse_json(trip_names):
+		frappe.db.savepoint("bulk_assign")
+		try:
+			trip = frappe.get_doc("Trip", name)
+			_assign(trip, driver or None, vehicle or None, _("Bulk assignment"))
+			done.append(name)
+		except (frappe.ValidationError, frappe.PermissionError) as exc:
+			frappe.db.rollback(save_point="bulk_assign")
+			failed.append({"trip": name, "error": frappe.utils.strip_html(str(exc))})
+
+	return {"done": done, "failed": failed}
+
+
+@frappe.whitelist()
+def suggest_vehicles(trip_date, scheduled_time=None, no_of_passengers=None, limit=10):
+	"""Vehicles that could take a trip, best first.
+
+	The client wants "vehicle availability and suggestion". A vehicle is offered
+	when it is Available and not already on a trip at that date and time, and
+	has enough seats if the passenger count is known. They are ranked by: no
+	expired Mulkiya or insurance (an expired one is shown last, flagged), then
+	the company's own vehicles before an outside supplier's (cheaper), then the
+	tightest fit for the passengers, then the lightest day. The reasons are
+	returned so the person choosing can see why."""
+	frappe.has_permission("Trip", "read", throw=True)
+
+	pax = frappe.utils.cint(no_of_passengers)
+
+	busy = frappe._dict()
+	for row in frappe.get_all(
+		"Trip",
+		filters={"trip_date": trip_date, "status": ("not in", ["Rejected", "Cancelled"]), "vehicle": ("is", "set")},
+		fields=["vehicle", "scheduled_time"],
+	):
+		busy.setdefault(row.vehicle, []).append(row.scheduled_time)
+
+	expired = set(
+		frappe.get_all(
+			"Compliance Document",
+			filters={
+				"attached_to_doctype": "Rental Vehicle",
+				"status": "Expired",
+				"document_type": ("in", ("Mulkiya (Registration)", "Insurance Policy")),
+			},
+			pluck="attached_to_name",
+		)
+	)
+
+	requested = frappe.utils.to_timedelta(scheduled_time) if scheduled_time else None
+	suggestions = []
+	for v in frappe.get_all(
+		"Rental Vehicle",
+		filters={"status": "Available"},
+		fields=["name", "vehicle_make", "vehicle_model", "vehicle_class", "seating_capacity",
+				"ownership_type", "assigned_driver"],
+	):
+		times = busy.get(v.name, [])
+		if requested is not None and requested in times:
+			continue
+
+		seats = frappe.utils.cint(v.seating_capacity)
+		if pax and seats and seats < pax:
+			continue
+
+		reasons = []
+		if seats:
+			reasons.append(_("{0} seats").format(seats) + (_(" for {0} passengers").format(pax) if pax else ""))
+		elif pax:
+			reasons.append(_("seating not recorded"))
+		reasons.append(_("company vehicle") if v.ownership_type == "Company-Owned" else
+					   (_("outside supplier") if v.ownership_type else _("ownership not recorded")))
+		reasons.append(_("{0} other trip(s) that day").format(len(times)) if times else _("free that day"))
+		if v.name in expired:
+			reasons.append(_("EXPIRED Mulkiya or insurance"))
+
+		suggestions.append(
+			{
+				"vehicle": v.name,
+				"label": " ".join(filter(None, [v.vehicle_make, v.vehicle_model])),
+				"seating_capacity": v.seating_capacity,
+				"vehicle_class": v.vehicle_class,
+				"assigned_driver": v.assigned_driver,
+				"reasons": ", ".join(reasons),
+				"compliance_issue": v.name in expired,
+				"_rank": (
+					v.name in expired,
+					# With a passenger count to meet, a vehicle whose seating is not
+					# on record cannot be vouched for, so it ranks after every
+					# vehicle that is known to fit.
+					bool(pax) and not seats,
+					v.ownership_type != "Company-Owned",
+					(seats - pax) if (pax and seats) else 0,
+					len(times),
+				),
+			}
+		)
+
+	suggestions.sort(key=lambda s: s["_rank"])
+	for s in suggestions:
+		del s["_rank"]
+	return suggestions[: frappe.utils.cint(limit) or 10]

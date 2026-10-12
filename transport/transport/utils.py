@@ -69,3 +69,26 @@ def is_project_holiday(project, date):
 	Timesheet.populate_trips (PH flag on the billing line) so both read the
 	same Project holiday_list the same way."""
 	return get_project_holiday_kind(project, date) is not None
+
+
+def get_project_places(project):
+	"""Every place a Project knows about: the ends of its routes and the pickup
+	and drop points on its shift terms. Empty when the Project has described
+	none of them yet - in which case there is nothing to hold a Trip to."""
+	if not project:
+		return set()
+
+	places = set()
+	for route in frappe.get_all("Route", filters={"project": project}, fields=["from_place", "to_place"]):
+		places.update((route.from_place, route.to_place))
+
+	for shift in frappe.get_all(
+		"Transport Project Shift",
+		filters={"parent": project, "parenttype": "Project"},
+		fields=["from_place", "to_place"],
+	):
+		places.update((shift.from_place, shift.to_place))
+
+	places.discard(None)
+	places.discard("")
+	return places

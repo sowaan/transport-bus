@@ -12,6 +12,9 @@
   "column_break_1",
   "driver",
   "vehicle",
+  "driver_name",
+  "vehicle_type",
+  "seating_capacity",
   "scheduled_time",
   "actual_start_time",
   "actual_end_time",
@@ -143,12 +146,33 @@
    "fieldtype": "Float",
    "label": "Duration (hrs)",
    "read_only": 1
+  },
+  {
+   "fetch_from": "driver.full_name",
+   "fieldname": "driver_name",
+   "fieldtype": "Data",
+   "label": "Driver Name",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "vehicle.vehicle_type",
+   "fieldname": "vehicle_type",
+   "fieldtype": "Data",
+   "label": "Vehicle Type",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "vehicle.seating_capacity",
+   "fieldname": "seating_capacity",
+   "fieldtype": "Data",
+   "label": "Seating Capacity",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-09-22 20:41:16.994759",
+ "modified": "2026-10-11 22:00:00.000000",
  "modified_by": "Administrator",
  "module": "Transport",
  "name": "Transport Timesheet Trip",

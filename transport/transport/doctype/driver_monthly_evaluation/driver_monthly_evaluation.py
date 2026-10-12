@@ -11,29 +11,24 @@ Deliberately kept separate from the existing `Driver Evaluation` doctype,
 which implements a different Good/Poor multi-rater form that also appears in
 the same source document - both forms are real and are used side by side.
 
+The client's UAT note added a second scorer: the customer, on six heads out of 5
+(`evaluation_type`). The heads for both live in transport.transport.evaluation_heads.
+
 Like `Driver Evaluation`, this doctype does NOT feed `Driver.average_rating`
 and does not participate in auto-blacklisting; that remains Trip Feedback's
 job.
 """
 
 import frappe
-from frappe import _
 from frappe.model.document import Document
 
-STANDARD_CRITERIA = (
-	"Attendance & Punctuality",
-	"Compliance with Traffic Rules",
-	"Driving Skills & Safety",
-	"Vehicle Maintenance & Cleanliness",
-	"Route Planning & Time Management",
-	"Customer/Client Interaction & Feedback",
-	"Reporting & Documentation Accuracy",
-	"Fuel Efficiency & Cost Awareness",
-	"Incident/Accident Record",
-	"Following a supervisor assigned duties",
+from transport.transport.evaluation_heads import (
+	default_criteria,
+	seed_criteria,
+	validate_scores,
 )
 
-DEFAULT_MAX_SCORE = 10
+CUSTOMER = "Customer"
 
 # (minimum percentage, label) - evaluated highest band first.
 RATING_BANDS = (
@@ -54,6 +49,14 @@ def get_rating_band(percentage):
 	return RATING_BANDS[-1][1]
 
 
+@frappe.whitelist()
+def get_criteria(evaluation_type=None):
+	"""The standard heads for a new form. The desk form calls this on load: the
+	criteria table is `reqd`, so Frappe shows a blank row on a new document and
+	the heads used to appear only after the first save."""
+	return default_criteria(customer=evaluation_type == CUSTOMER)
+
+
 class DriverMonthlyEvaluation(Document):
 	def validate(self):
 		self.seed_criteria()
@@ -61,31 +64,14 @@ class DriverMonthlyEvaluation(Document):
 		self.validate_scores()
 
 	def seed_criteria(self):
-		"""Populate the ten standard criteria on a fresh form.
+		"""Populate the standard heads on a fresh form.
 
-		Existing rows are never wiped or reordered - the client is free to add,
-		remove or rename criteria on a saved evaluation.
-		"""
-		if self.criteria:
-			return
-
-		for criterion in STANDARD_CRITERIA:
-			self.append("criteria", {"criterion": criterion, "max_score": DEFAULT_MAX_SCORE})
+		Existing rows are never wiped or reordered - an evaluation saved under
+		earlier heads keeps them."""
+		seed_criteria(self, "criteria", customer=self.evaluation_type == CUSTOMER)
 
 	def validate_scores(self):
-		for row in self.criteria:
-			if row.score_given is None or row.score_given == "":
-				continue
-
-			score_given = frappe.utils.cint(row.score_given)
-			max_score = frappe.utils.cint(row.max_score)
-
-			if score_given < 0 or score_given > max_score:
-				frappe.throw(
-					_("Row #{0}: Score Given for {1} must be between 0 and {2}.").format(
-						row.idx, row.criterion, max_score
-					)
-				)
+		validate_scores(self, "criteria", minimum=0)
 
 	def calculate_totals(self):
 		total = maximum = 0

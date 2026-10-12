@@ -1,0 +1,73 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-10-11 22:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "sl_no",
+  "check_point",
+  "frequency",
+  "condition",
+  "remarks"
+ ],
+ "fields": [
+  {
+   "columns": 1,
+   "fieldname": "sl_no",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Sl.",
+   "read_only": 1
+  },
+  {
+   "columns": 4,
+   "fieldname": "check_point",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Check Point",
+   "read_only": 1
+  },
+  {
+   "columns": 1,
+   "fieldname": "frequency",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Frequency",
+   "options": "Daily\nWeekly\nMonthly",
+   "read_only": 1
+  },
+  {
+   "columns": 2,
+   "description": "Good / Fair / Poor. The monthly grid prints the first letter - G, F or P.",
+   "fieldname": "condition",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Condition",
+   "options": "\nGood\nFair\nPoor"
+  },
+  {
+   "columns": 3,
+   "fieldname": "remarks",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Remarks"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-10-11 22:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Transport",
+ "name": "Vehicle Inspection Check Point",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "idx",
+ "sort_order": "ASC",
+ "states": [],
+ "track_changes": 0
+}

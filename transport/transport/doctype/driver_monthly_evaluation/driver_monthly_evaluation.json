@@ -8,6 +8,8 @@
  "field_order": [
   "driver_section",
   "driver",
+  "evaluation_type",
+  "customer",
   "employee",
   "column_break_driver",
   "evaluation_month",
@@ -52,6 +54,7 @@
    "reqd": 1
   },
   {
+   "fetch_from": "driver.employee",
    "fieldname": "employee",
    "fieldtype": "Link",
    "label": "Employee ID",
@@ -70,6 +73,7 @@
    "reqd": 1
   },
   {
+   "fetch_from": "employee.department",
    "fieldname": "department",
    "fieldtype": "Link",
    "label": "Department",
@@ -198,11 +202,28 @@
    "fieldname": "driver_signature_date",
    "fieldtype": "Date",
    "label": "Driver Signature Date"
+  },
+  {
+   "default": "Supervisor / Admin",
+   "description": "Supervisor / Admin scores ten heads out of 10. Customer scores six heads out of 5.",
+   "fieldname": "evaluation_type",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Evaluation By",
+   "options": "Supervisor / Admin\nCustomer",
+   "reqd": 1
+  },
+  {
+   "depends_on": "eval:doc.evaluation_type==\"Customer\"",
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "label": "Customer",
+   "options": "Customer"
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-06 17:00:00.000000",
+ "modified": "2026-10-11 22:00:00.000000",
  "modified_by": "Administrator",
  "module": "Transport",
  "name": "Driver Monthly Evaluation",

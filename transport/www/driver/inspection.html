@@ -1,0 +1,122 @@
+{% extends "templates/web.html" %}
+
+{% block page_content %}
+{% include "templates/includes/driver_portal_styles.html" %}
+<style>
+	.insp-row { padding: 10px 0; border-bottom: 1px solid var(--drv-border); }
+	.insp-row:last-child { border-bottom: 0; }
+	.insp-label { font-weight: 600; margin-bottom: 6px; }
+	.insp-label small { font-weight: 400; color: var(--drv-muted); margin-left: 6px; }
+	.insp-choices { display: flex; gap: 8px; }
+	.insp-choices label { flex: 1; text-align: center; border: 1px solid var(--drv-border); border-radius: 8px; padding: 8px 0; margin: 0; font-weight: 600; cursor: pointer; }
+	.insp-choices input { display: none; }
+	.insp-choices input:checked + span.g { color: #fff; }
+	.insp-choices label.sel-good { background: var(--drv-green); color: #fff; border-color: var(--drv-green); }
+	.insp-choices label.sel-fair { background: #e6a100; color: #fff; border-color: #e6a100; }
+	.insp-choices label.sel-poor { background: var(--drv-red); color: #fff; border-color: var(--drv-red); }
+</style>
+<div class="drv">
+	<a href="/driver" class="drv-back">&larr; {{ _("My Trips") }}</a>
+	{% if error %}
+		<div class="drv-empty">{{ error }}</div>
+	{% elif not vehicles %}
+		<div class="drv-empty">{{ _("You have no vehicle to inspect today.") }}</div>
+	{% else %}
+		<div class="drv-hello"><h1>{{ _("Vehicle inspection") }}</h1><p>{{ _("Do this first, before your first trip. Daily points are required; weekly and monthly ones only on the day they are due.") }}</p></div>
+
+		{% for v in vehicles %}
+		<div class="drv-card insp-card" data-vehicle="{{ v.name }}">
+			<div class="drv-card-head"><h3>{{ v.name }}</h3>
+				{% if v.done %}<span class="pill pill-completed">{{ _("Done today") }}</span>{% endif %}
+			</div>
+			{% if not v.done %}
+			<form class="insp-form">
+				{% for p in points %}
+				<div class="insp-row">
+					<div class="insp-label">{{ p.sl_no }}. {{ p.check_point }}<small>{{ _(p.frequency) }}</small></div>
+					<div class="insp-choices" data-point="{{ p.sl_no }}">
+						<label><input type="radio" name="p{{ p.sl_no }}" value="Good"><span>{{ _("Good") }}</span></label>
+						<label><input type="radio" name="p{{ p.sl_no }}" value="Fair"><span>{{ _("Fair") }}</span></label>
+						<label><input type="radio" name="p{{ p.sl_no }}" value="Poor"><span>{{ _("Poor") }}</span></label>
+					</div>
+				</div>
+				{% endfor %}
+				<div class="field" style="margin-top:12px"><label>{{ _("Remarks") }}</label><textarea rows="2" class="insp-remarks"></textarea></div>
+				<button class="btn btn-primary btn-block" type="submit">{{ _("Submit inspection") }}</button>
+				<div class="drv-msg" role="alert"></div>
+			</form>
+			{% endif %}
+		</div>
+		{% endfor %}
+	{% endif %}
+</div>
+
+<script>
+frappe.ready(function () {
+	function errorText(data) {
+		var parts = [];
+		try {
+			if (data && data._server_messages) {
+				JSON.parse(data._server_messages).forEach(function (m) {
+					try { m = JSON.parse(m).message || m; } catch (e) {}
+					parts.push(String(m).replace(/<[^>]*>/g, " "));
+				});
+			}
+		} catch (e) {}
+		return parts.join(" ") || __("Something went wrong. Please try again.");
+	}
+
+	document.querySelectorAll(".insp-choices").forEach(function (group) {
+		group.addEventListener("change", function () {
+			group.querySelectorAll("label").forEach(function (l) { l.className = ""; });
+			var picked = group.querySelector("input:checked");
+			if (picked) picked.parentNode.className = "sel-" + picked.value.toLowerCase();
+		});
+	});
+
+	document.querySelectorAll(".insp-card").forEach(function (card) {
+		var form = card.querySelector(".insp-form");
+		if (!form) return;
+		var msg = form.querySelector(".drv-msg");
+		form.addEventListener("submit", function (ev) {
+			ev.preventDefault();
+			var points = {};
+			form.querySelectorAll(".insp-choices").forEach(function (g) {
+				var picked = g.querySelector("input:checked");
+				if (picked) points[g.dataset.point] = picked.value;
+			});
+			var body = new URLSearchParams();
+			body.append("vehicle", card.dataset.vehicle);
+			body.append("points", JSON.stringify(points));
+			body.append("remarks", form.querySelector(".insp-remarks").value.trim());
+			var btn = form.querySelector("button[type=submit]");
+			btn.disabled = true;
+			msg.className = "drv-msg";
+			fetch("/api/method/transport.transport.driver_portal.submit_daily_inspection", {
+				method: "POST",
+				headers: { "X-Frappe-CSRF-Token": frappe.csrf_token, "Accept": "application/json", "Content-Type": "application/x-www-form-urlencoded" },
+				credentials: "include",
+				body: body,
+			})
+				.catch(function () { throw __("No connection. Check your internet and try again."); })
+				.then(function (r) {
+					return r.json().catch(function () { return {}; }).then(function (data) {
+						if (!r.ok || data.exc || data.exception) throw errorText(data);
+						return data.message;
+					});
+				})
+				.then(function (result) {
+					msg.className = "drv-msg show ok";
+					msg.textContent = __("Inspection recorded.") + (result.poor.length ? " " + __("Operations has been told about: {0}.", [result.poor.join(", ")]) : "");
+					form.querySelectorAll("input, textarea, button").forEach(function (el) { el.disabled = true; });
+				})
+				.catch(function (e) {
+					btn.disabled = false;
+					msg.className = "drv-msg show error";
+					msg.textContent = e;
+				});
+		});
+	});
+});
+</script>
+{% endblock %}

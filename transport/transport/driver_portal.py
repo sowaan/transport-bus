@@ -147,6 +147,8 @@ def start_trip(trip_name, latitude, longitude, vehicle_photo, start_odometer=Non
 	if not vehicle_photo:
 		frappe.throw(_("A vehicle photo is required to start the trip."))
 
+	require_daily_inspection(trip.vehicle)
+
 	check_geofence(trip.from_place, latitude, longitude)
 
 	trip.db_set(
@@ -450,7 +452,11 @@ def escalate_unconfirmed_trips():
 # --------------------------------------------------------------------------
 
 def notify_driver(driver, subject, message, reference_doctype=None, reference_name=None):
-	user = frappe.db.get_value("Employee", frappe.db.get_value("Driver", driver, "employee"), "user_id")
+	# A Driver with no linked Employee has no user to tell. Guarded explicitly:
+	# get_value("Employee", None, ...) does not return nothing, it returns the
+	# first Employee on the site - so the notice would go to a stranger.
+	employee = frappe.db.get_value("Driver", driver, "employee")
+	user = frappe.db.get_value("Employee", employee, "user_id") if employee else None
 	if user:
 		_notify_users([user], subject, message, reference_doctype, reference_name)
 
@@ -478,3 +484,108 @@ def _notify_users(users, subject, message, reference_doctype=None, reference_nam
 			"from_user": frappe.session.user,
 		},
 	)
+
+
+
+# --------------------------------------------------------------------------
+# Daily vehicle inspection - the first thing a driver does each day
+# --------------------------------------------------------------------------
+
+def todays_inspection(vehicle):
+	"""Today's daily inspection of this vehicle, if one has been recorded."""
+	return frappe.db.get_value(
+		"Vehicle Inspection",
+		{"vehicle": vehicle, "inspection_type": "Daily", "inspection_date": nowdate()},
+		"name",
+	)
+
+
+def require_daily_inspection(vehicle):
+	"""Source doc, Vehicle Inspection: "Before starting the trip for the day, daily
+	the driver has to complete vehicle inspection as first thing."
+
+	Off unless Transport Settings turns it on. The page that records it - /driver/
+	inspection - exists either way; making it a gate is the decision to take when
+	drivers are using it, not before."""
+	if not vehicle:
+		return
+	if not frappe.db.get_single_value("Transport Settings", "require_daily_inspection_before_trip"):
+		return
+	if not todays_inspection(vehicle):
+		frappe.throw(
+			_("Inspect vehicle {0} first. Open 'Vehicle inspection' from the home page, tick every daily check point, then start the trip.").format(vehicle),
+			title=_("Vehicle inspection needed"),
+		)
+
+
+def get_inspectable_vehicles(driver):
+	"""Vehicles this driver may inspect today: the ones on their trips today, and
+	the one allocated to them."""
+	vehicles = set(
+		frappe.get_all(
+			"Trip",
+			filters={
+				"driver": driver,
+				"trip_date": nowdate(),
+				"status": ("in", ["Assigned", "Accepted", "Started", "Completed", "Approved"]),
+				"vehicle": ("is", "set"),
+			},
+			pluck="vehicle",
+		)
+	)
+	if frappe.db.has_column("Rental Vehicle", "assigned_driver"):
+		vehicles.update(frappe.get_all("Rental Vehicle", filters={"assigned_driver": driver}, pluck="name"))
+	return sorted(vehicles)
+
+
+@frappe.whitelist()
+def submit_daily_inspection(vehicle, points, remarks=None):
+	"""Record the driver's daily inspection. `points` is {check point number:
+	"Good" | "Fair" | "Poor"}. Every point checked **daily** must be answered; the
+	weekly and monthly ones may be left for the day they are due."""
+	driver = get_driver_for_user()
+	if not driver:
+		frappe.throw(_("No Driver record is linked to your account. Contact Operations."), frappe.PermissionError)
+	if vehicle not in get_inspectable_vehicles(driver):
+		frappe.throw(_("{0} is not one of your vehicles today.").format(vehicle), frappe.PermissionError)
+	if todays_inspection(vehicle):
+		frappe.throw(_("{0} has already been inspected today.").format(vehicle))
+
+	from transport.transport.doctype.vehicle_inspection.vehicle_inspection import default_check_points
+
+	answers = frappe.parse_json(points) or {}
+	doc = frappe.get_doc(
+		{
+			"doctype": "Vehicle Inspection",
+			"vehicle": vehicle,
+			"driver": driver,
+			"inspection_type": "Daily",
+			"inspection_date": nowdate(),
+			"inspected_by": frappe.session.user,
+			"damages_remarks": remarks,
+		}
+	)
+	unanswered = []
+	for row in default_check_points():
+		condition = answers.get(str(row["sl_no"]))
+		if condition not in ("Good", "Fair", "Poor"):
+			condition = None
+			if row["frequency"] == "Daily":
+				unanswered.append(row["check_point"])
+		doc.append("check_points", {**row, "condition": condition})
+
+	if unanswered:
+		frappe.throw(_("Answer every daily check point. Still to do: {0}.").format(", ".join(unanswered)))
+
+	doc.insert(ignore_permissions=True)
+
+	poor = [row.check_point for row in doc.check_points if row.condition == "Poor"]
+	if poor:
+		notify_roles(
+			("Transport In-Charge", "Transport Operations"),
+			_("Vehicle {0}: poor on inspection").format(vehicle),
+			_("{0} marked Poor by the driver: {1}.").format(vehicle, ", ".join(poor)),
+			doc.doctype,
+			doc.name,
+		)
+	return {"name": doc.name, "poor": poor}

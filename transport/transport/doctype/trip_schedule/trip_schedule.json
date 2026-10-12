@@ -9,10 +9,19 @@
   "schedule_section",
   "project",
   "route",
+  "shift",
+  "schedule_type",
   "column_break_schedule",
   "status",
   "generate_pickup_leg",
   "generate_drop_leg",
+  "assignment_section",
+  "vehicle",
+  "seating_capacity",
+  "column_break_assignment",
+  "driver",
+  "no_of_passengers",
+  "sales_order",
   "recurrence_section",
   "effective_from",
   "column_break_recurrence",
@@ -95,7 +104,7 @@
   {
    "fieldname": "effective_to",
    "fieldtype": "Date",
-   "label": "Effective To"
+   "label": "Effective To (To Date)"
   },
   {
    "fieldname": "weekdays_section",
@@ -159,12 +168,71 @@
    "fieldtype": "Date",
    "label": "Last Generated Till",
    "read_only": 1
+  },
+  {
+   "fieldname": "shift",
+   "fieldtype": "Select",
+   "label": "Shift",
+   "options": "\nMorning\nAfternoon\nEvening\nNight"
+  },
+  {
+   "default": "Recurring",
+   "description": "Single Time generates one day only - From Date - whatever days of the week are ticked.",
+   "fieldname": "schedule_type",
+   "fieldtype": "Select",
+   "label": "Schedule Type",
+   "options": "Recurring\nSingle Time"
+  },
+  {
+   "fieldname": "assignment_section",
+   "fieldtype": "Section Break",
+   "label": "Default Driver & Vehicle"
+  },
+  {
+   "description": "Generated Trips start with this vehicle and driver, so a month is assigned once.",
+   "fieldname": "vehicle",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Vehicle",
+   "options": "Rental Vehicle"
+  },
+  {
+   "fetch_from": "vehicle.seating_capacity",
+   "fieldname": "seating_capacity",
+   "fieldtype": "Data",
+   "label": "Seating Capacity",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_assignment",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "driver",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Driver",
+   "options": "Driver"
+  },
+  {
+   "fieldname": "no_of_passengers",
+   "fieldtype": "Int",
+   "label": "No. of Passengers",
+   "non_negative": 1
+  },
+  {
+   "fetch_from": "project.sales_order",
+   "fieldname": "sales_order",
+   "fieldtype": "Link",
+   "label": "Sales Order",
+   "options": "Sales Order",
+   "read_only": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-23 21:44:33.271656",
+ "modified": "2026-10-11 22:00:00.000000",
  "modified_by": "Administrator",
  "module": "Transport",
  "name": "Trip Schedule",

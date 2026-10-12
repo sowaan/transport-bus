@@ -1,6 +1,6 @@
 {
  "charts": [],
- "content": "[{\"id\": \"hdr_main\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Sowaan Transport</b></span>\", \"col\": 12}}, {\"id\": \"par_main\", \"type\": \"paragraph\", \"data\": {\"text\": \"Corporate transport contracting \\u2014 enquiry through to invoicing, fleet compliance and traffic fines.\", \"col\": 12}}, {\"id\": \"sp_1\", \"type\": \"spacer\", \"data\": {\"col\": 12}}, {\"id\": \"twhdr01\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>At a Glance</b></span>\", \"col\": 12}}, {\"id\": \"twcard00\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Trips Today\", \"col\": 4}}, {\"id\": \"twcard01\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Expenses Pending Approval\", \"col\": 4}}, {\"id\": \"twcard02\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Open Customer Requests\", \"col\": 4}}, {\"id\": \"twcard03\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Pending Invoices Amount\", \"col\": 4}}, {\"id\": \"twcard04\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Loss-Making Projects\", \"col\": 4}}, {\"id\": \"twcard05\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Fleet Utilization Percent\", \"col\": 4}}, {\"id\": \"twspc01\", \"type\": \"spacer\", \"data\": {\"col\": 12}}, {\"id\": \"hdr_qa\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Quick Access</b></span>\", \"col\": 12}}, {\"id\": \"sc_0\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Transport Rate Calculation\", \"col\": 3}}, {\"id\": \"sc_1\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Trip Schedule\", \"col\": 3}}, {\"id\": \"sc_2\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Trip\", \"col\": 3}}, {\"id\": \"sc_3\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Transport Timesheet\", \"col\": 3}}, {\"id\": \"sc_4\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Rental Vehicle\", \"col\": 3}}, {\"id\": \"sc_5\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Transport Settings\", \"col\": 3}}, {\"id\": \"sp_2\", \"type\": \"spacer\", \"data\": {\"col\": 12}}, {\"id\": \"hdr_mod\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Modules</b></span>\", \"col\": 12}}, {\"id\": \"cd_0\", \"type\": \"card\", \"data\": {\"card_name\": \"Enquiry & Quotation\", \"col\": 4}}, {\"id\": \"cd_1\", \"type\": \"card\", \"data\": {\"card_name\": \"Planning & Scheduling\", \"col\": 4}}, {\"id\": \"cd_2\", \"type\": \"card\", \"data\": {\"card_name\": \"Trip Execution\", \"col\": 4}}, {\"id\": \"cd_3\", \"type\": \"card\", \"data\": {\"card_name\": \"Timesheet & Billing\", \"col\": 4}}, {\"id\": \"cd_4\", \"type\": \"card\", \"data\": {\"card_name\": \"Fleet\", \"col\": 4}}, {\"id\": \"cd_5\", \"type\": \"card\", \"data\": {\"card_name\": \"Drivers\", \"col\": 4}}, {\"id\": \"cd_6\", \"type\": \"card\", \"data\": {\"card_name\": \"Traffic Fines\", \"col\": 4}}, {\"id\": \"cd_7\", \"type\": \"card\", \"data\": {\"card_name\": \"Reports\", \"col\": 4}}, {\"id\": \"cd_8\", \"type\": \"card\", \"data\": {\"card_name\": \"Setup\", \"col\": 4}}]",
+ "content": "[{\"id\": \"hdr_main\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Sowaan Transport</b></span>\", \"col\": 12}}, {\"id\": \"par_main\", \"type\": \"paragraph\", \"data\": {\"text\": \"Corporate transport contracting \\u2014 enquiry through to invoicing, fleet compliance and traffic fines.\", \"col\": 12}}, {\"id\": \"sp_1\", \"type\": \"spacer\", \"data\": {\"col\": 12}}, {\"id\": \"twhdr01\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>At a Glance</b></span>\", \"col\": 12}}, {\"id\": \"twcard00\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Trips Today\", \"col\": 4}}, {\"id\": \"twcard01\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Expenses Pending Approval\", \"col\": 4}}, {\"id\": \"twcard02\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Open Customer Requests\", \"col\": 4}}, {\"id\": \"twcard03\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Pending Invoices Amount\", \"col\": 4}}, {\"id\": \"twcard04\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Loss-Making Projects\", \"col\": 4}}, {\"id\": \"twcard05\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Fleet Utilization Percent\", \"col\": 4}}, {\"id\": \"twspc01\", \"type\": \"spacer\", \"data\": {\"col\": 12}}, {\"id\": \"opshdr01\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Operations - Today</b></span>\", \"col\": 12}}, {\"id\": \"opscard00\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Drivers Busy Today\", \"col\": 4}}, {\"id\": \"opscard01\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Drivers Available Today\", \"col\": 4}}, {\"id\": \"opscard02\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Vehicles Busy Today\", \"col\": 4}}, {\"id\": \"opscard03\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Vehicles Available Today\", \"col\": 4}}, {\"id\": \"opscard04\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Trips Not Accepted\", \"col\": 4}}, {\"id\": \"opscard05\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Delayed Trips\", \"col\": 4}}, {\"id\": \"opsspc01\", \"type\": \"spacer\", \"data\": {\"col\": 12}}, {\"id\": \"mgmthdr01\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Management - This Month</b></span>\", \"col\": 12}}, {\"id\": \"mgmtcard00\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Transport Revenue This Month\", \"col\": 4}}, {\"id\": \"mgmtcard01\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Direct Cost This Month\", \"col\": 4}}, {\"id\": \"mgmtcard02\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Idle Vehicles 7 Days\", \"col\": 4}}, {\"id\": \"mgmtcard03\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Idle Drivers 7 Days\", \"col\": 4}}, {\"id\": \"mgmtcard04\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Documents Expiring or Expired\", \"col\": 4}}, {\"id\": \"mgmtcard05\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Vehicles Over Fuel Limit\", \"col\": 4}}, {\"id\": \"mgmtspc01\", \"type\": \"spacer\", \"data\": {\"col\": 12}}, {\"id\": \"hdr_qa\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Quick Access</b></span>\", \"col\": 12}}, {\"id\": \"sc_0\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Transport Rate Calculation\", \"col\": 3}}, {\"id\": \"sc_1\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Trip Schedule\", \"col\": 3}}, {\"id\": \"sc_2\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Trip\", \"col\": 3}}, {\"id\": \"sc_3\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Transport Timesheet\", \"col\": 3}}, {\"id\": \"sc_4\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Rental Vehicle\", \"col\": 3}}, {\"id\": \"sc_5\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Transport Settings\", \"col\": 3}}, {\"id\": \"scx_0\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Transport Request\", \"col\": 3}}, {\"id\": \"scx_1\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Vehicle Renewal\", \"col\": 3}}, {\"id\": \"scx_2\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Service Agreement\", \"col\": 3}}, {\"id\": \"scx_3\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Transport Cost Master\", \"col\": 3}}, {\"id\": \"sp_2\", \"type\": \"spacer\", \"data\": {\"col\": 12}}, {\"id\": \"hdr_mod\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Modules</b></span>\", \"col\": 12}}, {\"id\": \"cd_0\", \"type\": \"card\", \"data\": {\"card_name\": \"Enquiry & Quotation\", \"col\": 4}}, {\"id\": \"cd_1\", \"type\": \"card\", \"data\": {\"card_name\": \"Planning & Scheduling\", \"col\": 4}}, {\"id\": \"cd_2\", \"type\": \"card\", \"data\": {\"card_name\": \"Trip Execution\", \"col\": 4}}, {\"id\": \"cd_3\", \"type\": \"card\", \"data\": {\"card_name\": \"Timesheet & Billing\", \"col\": 4}}, {\"id\": \"cd_4\", \"type\": \"card\", \"data\": {\"card_name\": \"Fleet\", \"col\": 4}}, {\"id\": \"cd_5\", \"type\": \"card\", \"data\": {\"card_name\": \"Drivers\", \"col\": 4}}, {\"id\": \"cd_6\", \"type\": \"card\", \"data\": {\"card_name\": \"Traffic Fines\", \"col\": 4}}, {\"id\": \"cd_7\", \"type\": \"card\", \"data\": {\"card_name\": \"Reports\", \"col\": 4}}, {\"id\": \"cd_8\", \"type\": \"card\", \"data\": {\"card_name\": \"Setup\", \"col\": 4}}]",
  "creation": "2026-08-05 09:00:00.000000",
  "custom_blocks": [],
  "docstatus": 0,
@@ -17,7 +17,7 @@
    "hidden": 0,
    "is_query_report": 0,
    "label": "Enquiry & Quotation",
-   "link_count": 5,
+   "link_count": 8,
    "link_type": "DocType",
    "onboard": 0,
    "type": "Card Break"
@@ -59,6 +59,28 @@
    "dependencies": "",
    "hidden": 0,
    "is_query_report": 0,
+   "label": "Transport Cost Master",
+   "link_count": 0,
+   "link_to": "Transport Cost Master",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Transport Fuel Price",
+   "link_count": 0,
+   "link_to": "Transport Fuel Price",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
    "label": "Quotation",
    "link_count": 0,
    "link_to": "Quotation",
@@ -73,6 +95,17 @@
    "label": "Sales Order",
    "link_count": 0,
    "link_to": "Sales Order",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Service Agreement",
+   "link_count": 0,
+   "link_to": "Service Agreement",
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
@@ -123,7 +156,7 @@
    "hidden": 0,
    "is_query_report": 0,
    "label": "Trip Execution",
-   "link_count": 4,
+   "link_count": 5,
    "link_type": "DocType",
    "onboard": 0,
    "type": "Card Break"
@@ -157,6 +190,17 @@
    "label": "Customer Request",
    "link_count": 0,
    "link_to": "Customer Request",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Transport Request",
+   "link_count": 0,
+   "link_to": "Transport Request",
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
@@ -218,7 +262,7 @@
    "hidden": 0,
    "is_query_report": 0,
    "label": "Fleet",
-   "link_count": 3,
+   "link_count": 4,
    "link_type": "DocType",
    "onboard": 0,
    "type": "Card Break"
@@ -252,6 +296,17 @@
    "label": "Compliance Document",
    "link_count": 0,
    "link_to": "Compliance Document",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Vehicle Renewal",
+   "link_count": 0,
+   "link_to": "Vehicle Renewal",
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
@@ -365,8 +420,39 @@
   {
    "hidden": 0,
    "is_query_report": 0,
+   "label": "Tolls",
+   "link_count": 2,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Toll Crossing",
+   "link_count": 0,
+   "link_to": "Toll Crossing",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Toll Tariff",
+   "link_count": 0,
+   "link_to": "Toll Tariff",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
    "label": "Reports",
-   "link_count": 7,
+   "link_count": 19,
    "link_type": "DocType",
    "onboard": 0,
    "type": "Card Break"
@@ -449,6 +535,138 @@
    "type": "Link"
   },
   {
+   "dependencies": "Rental Vehicle",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Company Vehicle List",
+   "link_count": 0,
+   "link_to": "Company Vehicle List",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "Rental Vehicle",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Vehicle Log History",
+   "link_count": 0,
+   "link_to": "Vehicle Log History",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "Vehicle Inspection",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Vehicle Inspection Grid",
+   "link_count": 0,
+   "link_to": "Vehicle Inspection Grid",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "Rental Vehicle",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Vehicle Condition Report",
+   "link_count": 0,
+   "link_to": "Vehicle Condition Report",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "Rental Vehicle",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Vehicle Monthly KM Log",
+   "link_count": 0,
+   "link_to": "Vehicle Monthly KM Log",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "Rental Vehicle",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Vehicle Efficiency and Replacement",
+   "link_count": 0,
+   "link_to": "Vehicle Efficiency and Replacement",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "Driver",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Driver Utilization",
+   "link_count": 0,
+   "link_to": "Driver Utilization",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "Driver",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Driver Violations and Black Points",
+   "link_count": 0,
+   "link_to": "Driver Violations and Black Points",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "Project",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Expected KM vs Fuel",
+   "link_count": 0,
+   "link_to": "Expected KM vs Fuel",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "Trip",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Transport Profitability",
+   "link_count": 0,
+   "link_to": "Transport Profitability",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "Toll Crossing",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Toll Expense Report",
+   "link_count": 0,
+   "link_to": "Toll Expense Report",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "Transport Request",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Transport Request Statement",
+   "link_count": 0,
+   "link_to": "Transport Request Statement",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
    "hidden": 0,
    "is_query_report": 0,
    "label": "Setup",
@@ -469,7 +687,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-09-16 21:30:00.000000",
+ "modified": "2026-10-11 22:00:00.000000",
  "modified_by": "Administrator",
  "module": "Transport",
  "name": "Sowaan Transport",
@@ -497,6 +715,54 @@
   {
    "label": "Fleet Utilization %",
    "number_card_name": "Fleet Utilization Percent"
+  },
+  {
+   "label": "Drivers Busy Today",
+   "number_card_name": "Drivers Busy Today"
+  },
+  {
+   "label": "Drivers Available Today",
+   "number_card_name": "Drivers Available Today"
+  },
+  {
+   "label": "Vehicles Busy Today",
+   "number_card_name": "Vehicles Busy Today"
+  },
+  {
+   "label": "Vehicles Available Today",
+   "number_card_name": "Vehicles Available Today"
+  },
+  {
+   "label": "Trips Not Accepted",
+   "number_card_name": "Trips Not Accepted"
+  },
+  {
+   "label": "Delayed Trips",
+   "number_card_name": "Delayed Trips"
+  },
+  {
+   "label": "Transport Revenue This Month",
+   "number_card_name": "Transport Revenue This Month"
+  },
+  {
+   "label": "Direct Cost This Month",
+   "number_card_name": "Direct Cost This Month"
+  },
+  {
+   "label": "Idle Vehicles 7 Days",
+   "number_card_name": "Idle Vehicles 7 Days"
+  },
+  {
+   "label": "Idle Drivers 7 Days",
+   "number_card_name": "Idle Drivers 7 Days"
+  },
+  {
+   "label": "Documents Expiring or Expired",
+   "number_card_name": "Documents Expiring or Expired"
+  },
+  {
+   "label": "Vehicles Over Fuel Limit",
+   "number_card_name": "Vehicles Over Fuel Limit"
   }
  ],
  "owner": "Administrator",
@@ -552,6 +818,34 @@
    "doc_view": "List",
    "label": "Transport Settings",
    "link_to": "Transport Settings",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Transport Request",
+   "link_to": "Transport Request",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Vehicle Renewal",
+   "link_to": "Vehicle Renewal",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Service Agreement",
+   "link_to": "Service Agreement",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Transport Cost Master",
+   "link_to": "Transport Cost Master",
    "type": "DocType"
   }
  ],

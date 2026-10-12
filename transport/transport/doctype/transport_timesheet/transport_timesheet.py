@@ -37,6 +37,7 @@ class TransportTimesheet(Document):
 			frappe.throw(_("Period To cannot be before Period From."))
 		self.calculate_totals()
 		self.calculate_vehicle_deployments()
+		self.set_fleet_summary()
 		self.push_manual_edits_to_trips()
 
 	def push_manual_edits_to_trips(self):
@@ -74,6 +75,13 @@ class TransportTimesheet(Document):
 		self.total_additional_trips = sum(1 for t in self.trips if t.is_additional)
 		self.total_hours = sum(flt(t.duration) for t in self.trips)
 
+		# A round trip is a pickup and its drop. Counted as the larger of the two
+		# so a lone extra leg doesn't hide a trip - this is what the "below 10
+		# round trips bills per trip" rule reads.
+		pickups = sum(1 for t in self.trips if t.direction == "Pickup")
+		drops = sum(1 for t in self.trips if t.direction == "Drop")
+		self.total_round_trips = max(pickups, drops)
+
 		# Both counts are kept because the charge basis is configurable: a rate
 		# quoted against a shift reads as per-day, but the client may confirm
 		# per-trip. Accounts can also see both before approving the invoice.
@@ -84,10 +92,54 @@ class TransportTimesheet(Document):
 		self.total_public_holiday_trips = len(holiday_rows)
 		self.total_weekend_days = len({t.trip_date for t in weekend_rows})
 		self.total_public_holiday_days = len({t.trip_date for t in holiday_rows})
+		# Saturdays and Sundays are counted by the calendar, apart from the
+		# holiday list: the client's timesheet wants "Saturdays" and "Sundays" as
+		# their own totals, and a project with no holiday list still has both.
+		self.total_saturday_trips = sum(1 for t in self.trips if t.trip_date and getdate(t.trip_date).weekday() == 5)
+		self.total_sunday_trips = sum(1 for t in self.trips if t.trip_date and getdate(t.trip_date).weekday() == 6)
 		self.total_weekend_hours = sum(flt(t.duration) for t in weekend_rows)
 		self.total_public_holiday_hours = sum(flt(t.duration) for t in holiday_rows)
 		self.total_duty_hours = sum(flt(t.duration) for t in self.trips if t.duty_type == "Duty")
 		self.total_ot_hours = sum(flt(t.duration) for t in self.trips if t.duty_type == "OT")
+
+	def set_fleet_summary(self):
+		"""Who drove what, spelled out on the timesheet itself.
+
+		The trip lines carry the Driver and Vehicle as links, which show an ID;
+		the client's timesheet format opens with the driver's name and the
+		vehicle type, so both are summarised here and printed from here."""
+		driver_ids = list(dict.fromkeys(row.driver for row in self.trips if row.driver))
+		vehicle_ids = list(dict.fromkeys(
+			[row.vehicle for row in self.trips if row.vehicle]
+			+ [row.vehicle for row in (self.get("monthly_deployments") or []) if row.vehicle]
+		))
+
+		names = {}
+		if driver_ids:
+			names = dict(frappe.get_all(
+				"Driver", filters={"name": ("in", driver_ids)}, fields=["name", "full_name"], as_list=True
+			))
+		self.driver_names = ", ".join(names.get(driver) or driver for driver in driver_ids)
+
+		details = {}
+		if vehicle_ids:
+			details = {
+				v.name: v for v in frappe.get_all(
+					"Rental Vehicle",
+					filters={"name": ("in", vehicle_ids)},
+					fields=["name", "vehicle_type", "seating_capacity"],
+				)
+			}
+		lines = []
+		for vehicle in vehicle_ids:
+			info = details.get(vehicle)
+			extras = []
+			if info and info.seating_capacity:
+				extras.append(_("{0}-seater").format(info.seating_capacity))
+			if info and info.vehicle_type:
+				extras.append(info.vehicle_type)
+			lines.append(f"{vehicle} - {' '.join(extras)}" if extras else vehicle)
+		self.vehicle_details = "\n".join(lines)
 
 	def calculate_vehicle_deployments(self):
 		"""Fill the derived columns on the Vehicle Deployment table.
@@ -160,6 +212,12 @@ class TransportTimesheet(Document):
 	@frappe.whitelist()
 	def populate_trips(self):
 		self.check_permission("write")
+		return self._populate_trips()
+
+	def _populate_trips(self, ignore_permissions=False):
+		"""`ignore_permissions` is for the timesheet built automatically when an
+		In-charge approves a trip - they may approve trips but have read-only
+		access to Timesheets, and approving must not fail on that."""
 		if self.status != "Draft":
 			frappe.throw(_("Trips can only be (re)generated while the Timesheet is Draft."))
 		if not (self.project and self.period_from and self.period_to):
@@ -209,6 +267,8 @@ class TransportTimesheet(Document):
 				"duration": trip.duration,
 			})
 
+		if ignore_permissions:
+			self.flags.ignore_permissions = True
 		self.save()
 		for row in self.trips:
 			frappe.db.set_value("Trip", row.trip, "timesheet", self.name)
@@ -384,6 +444,55 @@ class TransportTimesheet(Document):
 					"project": self.project,
 				},
 			)
+
+	def below_round_trip_threshold(self):
+		"""Source doc, Transport Timesheet: "If the round trips is below 10 then
+		charges will be on trip basis." The monthly rate on the Sales Order
+		assumes a normal month of running; a month with fewer round trips than
+		the threshold is billed per trip instead. The threshold is in Transport
+		Settings (0 switches the rule off)."""
+		threshold = frappe.utils.cint(
+			frappe.db.get_single_value("Transport Settings", "monthly_round_trip_threshold")
+		)
+		return bool(threshold) and 0 < frappe.utils.cint(self.total_round_trips) < threshold
+
+	def build_per_trip_lines(self, invoice):
+		"""Replace the Sales Order's monthly lines with one per-trip line.
+
+		Needs the contract's rate per round trip (a Project field): the Sales
+		Order only knows the monthly price, and dividing it by a thin month's trip
+		count would invent a rate nobody agreed. Better to stop and say so than
+		to invoice a number that is a guess."""
+		settings = frappe.get_single("Transport Settings")
+		rate = flt(frappe.db.get_value("Project", self.project, "transport_rate_per_trip"))
+		if not rate:
+			frappe.throw(
+				_("This timesheet has only {0} round trip(s), below the {1} the monthly rate assumes, so it is "
+				  "billed per trip - but Project {2} has no Rate per Round Trip. Set it on the Project, "
+				  "then create the invoice again.").format(
+					self.total_round_trips, settings.monthly_round_trip_threshold, self.project
+				),
+				title=_("Rate per Round Trip missing"),
+			)
+		if not settings.transport_service_item:
+			frappe.throw(_("Set the Transport Service Item in Transport Settings before billing per trip."))
+
+		invoice.set("items", [])
+		invoice.append(
+			"items",
+			{
+				"item_code": settings.transport_service_item,
+				"qty": self.total_round_trips,
+				"rate": rate,
+				"description": _("Transport - {0} round trip(s), {1} to {2}").format(
+					self.total_round_trips, format_date_short(self.period_from), format_date_short(self.period_to)
+				),
+				"project": self.project,
+			},
+		)
+		invoice.remarks = _("Billed per trip: {0} round trips, fewer than the {1} a monthly rate assumes.").format(
+			self.total_round_trips, settings.monthly_round_trip_threshold
+		)
 
 	def fuel_is_reimbursed_by_client(self):
 		"""Source doc, Project Shift Terms: fuel is only rebilled when the
@@ -580,6 +689,8 @@ class TransportTimesheet(Document):
 		if self.billing_basis == "Monthly per Vehicle":
 			self.build_monthly_vehicle_lines(invoice)
 		else:
+			if self.below_round_trip_threshold():
+				self.build_per_trip_lines(invoice)
 			self.add_weekend_holiday_charges(invoice)
 
 		invoice.insert()
@@ -594,3 +705,58 @@ class TransportTimesheet(Document):
 		frappe.db.set_value("Sales Invoice", invoice.name, "certificate_of_completion", certificate.name)
 
 		return invoice.name
+
+
+def ensure_draft_timesheet(trip):
+	"""Make sure an approved Trip is on a Draft Timesheet, creating one if needed.
+
+	Reuses the Draft Timesheet for the project whose period covers the trip's
+	date; otherwise opens one for the calendar month. Pulling the trips in is
+	idempotent (see populate_trips), so every approval in a month just refreshes
+	the same Draft. If the month's earlier timesheet has already gone for
+	approval it is left alone - it is the billing record - and the late trip
+	lands on a new Draft instead.
+
+	A monthly-per-vehicle contract bills the vehicle-month, not trips, so it has
+	nothing to pull. Returns {"name", "created"} or None when switched off or not
+	applicable."""
+	from frappe.utils import get_first_day, get_last_day
+
+	if not frappe.db.get_single_value("Transport Settings", "auto_create_timesheet_on_approval"):
+		return None
+	if not trip.project:
+		return None
+	if frappe.db.get_value("Project", trip.project, "transport_billing_basis") == "Monthly per Vehicle":
+		return None
+
+	trip_date = getdate(trip.trip_date)
+	existing = frappe.get_all(
+		"Transport Timesheet",
+		filters={
+			"project": trip.project,
+			"status": "Draft",
+			"period_from": ("<=", trip_date),
+			"period_to": (">=", trip_date),
+		},
+		pluck="name",
+		order_by="creation desc",
+		limit=1,
+	)
+
+	created = not existing
+	if existing:
+		timesheet = frappe.get_doc("Transport Timesheet", existing[0])
+	else:
+		timesheet = frappe.get_doc(
+			{
+				"doctype": "Transport Timesheet",
+				"project": trip.project,
+				"period_from": get_first_day(trip_date),
+				"period_to": get_last_day(trip_date),
+			}
+		)
+		timesheet.flags.ignore_permissions = True
+		timesheet.insert()
+
+	timesheet._populate_trips(ignore_permissions=True)
+	return {"name": timesheet.name, "created": created}

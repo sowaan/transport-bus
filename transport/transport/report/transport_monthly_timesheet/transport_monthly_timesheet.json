@@ -7,7 +7,7 @@
  "doctype": "Report",
  "filters": [],
  "is_standard": "Yes",
- "modified": "2026-08-05 13:00:00.000000",
+ "modified": "2026-10-11 22:00:00.000000",
  "modified_by": "Administrator",
  "module": "Transport",
  "name": "Transport Monthly Timesheet",
@@ -19,6 +19,15 @@
  "roles": [
   {
    "role": "System Manager"
+  },
+  {
+   "role": "Transport Operations"
+  },
+  {
+   "role": "Transport In-Charge"
+  },
+  {
+   "role": "Transport Accounts"
   }
  ]
 }

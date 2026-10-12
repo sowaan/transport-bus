@@ -7,12 +7,21 @@
  "engine": "InnoDB",
  "field_order": [
   "details_section",
-  "project",
   "vehicle",
+  "vehicle_model",
+  "driver",
+  "driver_name",
+  "driver_mobile",
   "column_break_details",
   "inspection_type",
   "inspection_date",
   "inspected_by",
+  "checkpoints_section",
+  "check_points",
+  "handover_section",
+  "handover_checklist",
+  "damage_section",
+  "damage_marks",
   "condition_section",
   "odometer_reading",
   "fuel_level",
@@ -26,6 +35,11 @@
   "column_break_condition2",
   "tyre_condition",
   "battery_condition",
+  "agreement_section",
+  "agreement_reference",
+  "customer_name",
+  "column_break_agreement",
+  "customer_signature",
   "photo_section",
   "photo",
   "damages_remarks"
@@ -35,15 +49,6 @@
    "fieldname": "details_section",
    "fieldtype": "Section Break",
    "label": "Details"
-  },
-  {
-   "fieldname": "project",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Project",
-   "options": "Project",
-   "reqd": 1
   },
   {
    "fieldname": "vehicle",
@@ -59,12 +64,13 @@
    "fieldtype": "Column Break"
   },
   {
+   "default": "Daily",
    "fieldname": "inspection_type",
    "fieldtype": "Select",
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Inspection Type",
-   "options": "Check-In\nCheck-Out",
+   "options": "Daily\nFortnightly\nCheck-Out\nCheck-In",
    "reqd": 1
   },
   {
@@ -90,14 +96,14 @@
    "fieldname": "odometer_reading",
    "fieldtype": "Float",
    "label": "Odometer Reading (KM)",
-   "reqd": 1
+   "reqd": 0
   },
   {
    "fieldname": "fuel_level",
    "fieldtype": "Select",
    "label": "Fuel Level",
    "options": "Full\n3/4\nHalf\n1/4\nReserve/Empty",
-   "reqd": 1
+   "reqd": 0
   },
   {
    "default": "1",
@@ -122,6 +128,7 @@
    "label": "Lights & Indicators Functional"
   },
   {
+   "depends_on": "eval:doc.inspection_type!=\"Daily\"",
    "fieldname": "condition2_section",
    "fieldtype": "Section Break",
    "label": "Condition"
@@ -132,7 +139,7 @@
    "fieldtype": "Select",
    "label": "Exterior Condition",
    "options": "Good\nFair\nPoor",
-   "reqd": 1
+   "reqd": 0
   },
   {
    "default": "Good",
@@ -140,7 +147,7 @@
    "fieldtype": "Select",
    "label": "Interior Condition",
    "options": "Good\nFair\nPoor",
-   "reqd": 1
+   "reqd": 0
   },
   {
    "fieldname": "column_break_condition2",
@@ -152,7 +159,7 @@
    "fieldtype": "Select",
    "label": "Tyre Condition",
    "options": "Good\nFair\nPoor",
-   "reqd": 1
+   "reqd": 0
   },
   {
    "default": "Good",
@@ -160,7 +167,7 @@
    "fieldtype": "Select",
    "label": "Battery Condition",
    "options": "Good\nFair\nPoor",
-   "reqd": 1
+   "reqd": 0
   },
   {
    "fieldname": "photo_section",
@@ -172,17 +179,106 @@
    "fieldname": "photo",
    "fieldtype": "Attach Image",
    "label": "Vehicle Photo",
-   "reqd": 1
+   "reqd": 0
   },
   {
    "fieldname": "damages_remarks",
    "fieldtype": "Small Text",
-   "label": "Damages / Remarks"
+   "label": "Remarks / Comments"
+  },
+  {
+   "fetch_from": "vehicle.vehicle_model",
+   "fieldname": "vehicle_model",
+   "fieldtype": "Data",
+   "label": "Vehicle Model",
+   "read_only": 1
+  },
+  {
+   "fieldname": "driver",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Driver",
+   "options": "Driver"
+  },
+  {
+   "fetch_from": "driver.full_name",
+   "fieldname": "driver_name",
+   "fieldtype": "Data",
+   "label": "Driver Name",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "driver.cell_number",
+   "fieldname": "driver_mobile",
+   "fieldtype": "Data",
+   "label": "Mobile Number",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:doc.inspection_type==\"Daily\"",
+   "fieldname": "checkpoints_section",
+   "fieldtype": "Section Break",
+   "label": "Check Points"
+  },
+  {
+   "fieldname": "check_points",
+   "fieldtype": "Table",
+   "label": "Check Points",
+   "options": "Vehicle Inspection Check Point"
+  },
+  {
+   "depends_on": "eval:doc.inspection_type!=\"Daily\"",
+   "fieldname": "handover_section",
+   "fieldtype": "Section Break",
+   "label": "Handover Checklist"
+  },
+  {
+   "fieldname": "handover_checklist",
+   "fieldtype": "Table",
+   "label": "Checklist",
+   "options": "Vehicle Inspection Checklist Item"
+  },
+  {
+   "depends_on": "eval:doc.inspection_type!=\"Daily\"",
+   "fieldname": "damage_section",
+   "fieldtype": "Section Break",
+   "label": "Damage Marks  (S: Scratch, D: Dent, B: Broken)"
+  },
+  {
+   "fieldname": "damage_marks",
+   "fieldtype": "Table",
+   "label": "Damage Marks",
+   "options": "Vehicle Inspection Damage Mark"
+  },
+  {
+   "depends_on": "eval:doc.inspection_type!=\"Daily\"",
+   "fieldname": "agreement_section",
+   "fieldtype": "Section Break",
+   "label": "Handover Details"
+  },
+  {
+   "fieldname": "agreement_reference",
+   "fieldtype": "Data",
+   "label": "R.A. / Agreement No."
+  },
+  {
+   "fieldname": "customer_name",
+   "fieldtype": "Data",
+   "label": "Customer Name"
+  },
+  {
+   "fieldname": "column_break_agreement",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "customer_signature",
+   "fieldtype": "Signature",
+   "label": "Customer Signature"
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-05 17:00:00.000000",
+ "modified": "2026-10-11 22:00:00.000000",
  "modified_by": "Administrator",
  "module": "Transport",
  "name": "Vehicle Inspection",

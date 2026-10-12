@@ -45,7 +45,10 @@ fixtures = [
 		# **The exclusion has to be here as well as in the file**, because
 		# `bench export-fixtures` regenerates custom_field.json from this
 		# filter and would pull the Place fields straight back in.
-		"filters": [["module", "=", "Transport"], ["dt", "!=", "Place"]],
+		# Service History is excluded for the same reason - fleetify added both Place
+		# and Service History in one commit, so a site on an older fleetify has
+		# neither (fixtures/custom_field_service_history.json).
+		"filters": [["module", "=", "Transport"], ["dt", "not in", ["Place", "Service History"]]],
 	},
 	{
 		"doctype": "Role",
@@ -62,6 +65,10 @@ fixtures = [
 		"filters": {"module": "Transport"},
 	},
 ]
+
+# Jinja helpers for print formats. The Transport Timesheet print format asks for the
+# client's day-by-day matrix; building it in Python keeps the template to layout.
+jinja = {"methods": ["transport.transport.print_helpers.get_timesheet_matrix"]}
 
 # Apps
 # ------------------
@@ -229,7 +236,16 @@ after_migrate = "transport.setup.after_migrate"
 
 scheduler_events = {
 	"daily": [
-		"transport.transport.doctype.compliance_document.compliance_document.refresh_status"
+		"transport.transport.doctype.compliance_document.compliance_document.refresh_status",
+		# Reminders at 30 / 15 / 7 days for every dated document, and the
+		# customer PO expiry / 80%-consumed alerts. Both send one digest, not one
+		# message per record.
+		"transport.transport.alerts.send_expiry_alerts",
+		"transport.transport.alerts.send_po_alerts",
+		"transport.transport.alerts.send_service_reminders",
+		"transport.transport.alerts.send_fuel_limit_alerts",
+		"transport.transport.toll_match.rematch_unmatched",
+		"transport.transport.alerts.send_inspection_reminders",
 	],
 	"daily_long": [
 		# Gated twice over: does nothing unless Transport Settings enables it,
@@ -285,7 +301,11 @@ doc_events = {
 	"Quotation": {"validate": "transport.transport.crm_controls.enforce_lost_reason"},
 	"Sales Order": {
 		"validate": "transport.transport.crm_controls.sync_transport_project",
-		"on_submit": "transport.transport.crm_controls.notify_operations_on_sales_order",
+		"before_submit": "transport.transport.crm_controls.require_budget_for_transport_order",
+		"on_submit": [
+			"transport.transport.crm_controls.notify_operations_on_sales_order",
+			"transport.transport.project_tools.sync_project_from_sales_order",
+		],
 	},
 	# The per-shift contract terms live on Project as a Custom Field table, so
 	# their coherence has to be checked from the parent - Frappe does not run a
@@ -295,7 +315,28 @@ doc_events = {
 	},
 	# Rental Vehicle is fleetify's doctype - extended here via Custom Field
 	# fixtures plus this event, never by editing their files.
-	"Rental Vehicle": {"validate": "transport.transport.vehicle_plate.normalize_plate"},
+	"Rental Vehicle": {
+		"validate": [
+			"transport.transport.vehicle_plate.normalize_plate",
+			"transport.transport.vehicle_master.set_total_renewal_fee",
+		],
+		# Expiry dates typed on the vehicle form feed Compliance Document, which
+		# is what the reminders read.
+		"on_update": "transport.transport.compliance_sync.sync_vehicle_compliance",
+	},
+	# A toll crossing read from the portal is attached to the Trip that made it. Written
+	# never to raise: the fine sync ingest commits in batches and must not be aborted
+	# by anything here.
+	"Toll Crossing": {"after_insert": "transport.transport.toll_match.match_crossing"},
+	# An employee marked Is Driver gets a Driver record kept in step with the form,
+	# and the licence / CICPA / medical / training dates feed Compliance Document.
+	"Employee": {
+		"validate": "transport.transport.driver_sync.validate_driver_details",
+		"on_update": [
+			"transport.transport.driver_sync.sync_driver_from_employee",
+			"transport.transport.compliance_sync.sync_employee_compliance",
+		],
+	},
 	# A fine records whether it has been invoiced, and only the invoice knows
 	# when that stops being true. Without these two, cancelling or deleting the
 	# invoice left the fine claiming it was billed and refusing to raise

@@ -26,6 +26,18 @@ frappe.query_reports["Trip Sheet"] = {
 			fieldtype: "Date",
 		},
 		{
+			fieldname: "customer",
+			label: __("Customer"),
+			fieldtype: "Link",
+			options: "Customer",
+		},
+		{
+			fieldname: "shift",
+			label: __("Shift"),
+			fieldtype: "Select",
+			options: ["", "Morning", "Afternoon", "Evening", "Night"],
+		},
+		{
 			fieldname: "vehicle",
 			label: __("Vehicle"),
 			fieldtype: "Link",

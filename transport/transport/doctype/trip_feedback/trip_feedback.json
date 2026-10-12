@@ -9,9 +9,12 @@
   "trip_section",
   "trip",
   "driver",
+  "driver_name",
   "column_break_trip",
   "project",
   "feedback_from",
+  "criteria_section",
+  "criteria",
   "ratings_section",
   "driver_behaviour",
   "driving_quality",
@@ -21,6 +24,9 @@
   "driver_hygiene",
   "timing_punctuality",
   "overall_section",
+  "total_score",
+  "max_total_score",
+  "percentage",
   "overall_rating",
   "column_break_overall",
   "escalated",
@@ -74,30 +80,31 @@
    "reqd": 1
   },
   {
+   "depends_on": "eval:!(doc.criteria && doc.criteria.length)",
    "fieldname": "ratings_section",
    "fieldtype": "Section Break",
-   "label": "Ratings (1-5)"
+   "label": "Ratings (1-5) - earlier records"
   },
   {
    "fieldname": "driver_behaviour",
    "fieldtype": "Int",
    "label": "Driver Behaviour",
    "non_negative": 1,
-   "reqd": 1
+   "reqd": 0
   },
   {
    "fieldname": "driving_quality",
    "fieldtype": "Int",
    "label": "Driving Quality",
    "non_negative": 1,
-   "reqd": 1
+   "reqd": 0
   },
   {
    "fieldname": "vehicle_condition",
    "fieldtype": "Int",
    "label": "Vehicle Condition",
    "non_negative": 1,
-   "reqd": 1
+   "reqd": 0
   },
   {
    "fieldname": "column_break_ratings",
@@ -108,21 +115,21 @@
    "fieldtype": "Int",
    "label": "Vehicle Cleanliness",
    "non_negative": 1,
-   "reqd": 1
+   "reqd": 0
   },
   {
    "fieldname": "driver_hygiene",
    "fieldtype": "Int",
    "label": "Driver Hygiene",
    "non_negative": 1,
-   "reqd": 1
+   "reqd": 0
   },
   {
    "fieldname": "timing_punctuality",
    "fieldtype": "Int",
    "label": "Timing and Punctuality",
    "non_negative": 1,
-   "reqd": 1
+   "reqd": 0
   },
   {
    "fieldname": "overall_section",
@@ -130,6 +137,7 @@
    "label": "Overall"
   },
   {
+   "description": "Out of 5, whichever form was used - escalation and the driver's average rating read this.",
    "fieldname": "overall_rating",
    "fieldtype": "Float",
    "label": "Overall Rating (out of 5)",
@@ -162,11 +170,48 @@
    "fieldname": "remarks",
    "fieldtype": "Small Text",
    "label": "Remarks"
+  },
+  {
+   "fetch_from": "driver.full_name",
+   "fieldname": "driver_name",
+   "fieldtype": "Data",
+   "label": "Driver Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "criteria_section",
+   "fieldtype": "Section Break",
+   "label": "Criteria"
+  },
+  {
+   "description": "Customer feedback: six heads out of 5. Supervisor / Admin: ten heads out of 10.",
+   "fieldname": "criteria",
+   "fieldtype": "Table",
+   "label": "Criteria",
+   "options": "Trip Feedback Criteria"
+  },
+  {
+   "fieldname": "total_score",
+   "fieldtype": "Int",
+   "label": "Total Score",
+   "read_only": 1
+  },
+  {
+   "fieldname": "max_total_score",
+   "fieldtype": "Int",
+   "label": "Maximum Score",
+   "read_only": 1
+  },
+  {
+   "fieldname": "percentage",
+   "fieldtype": "Percent",
+   "label": "Score %",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-05 17:00:00.000000",
+ "modified": "2026-10-11 22:00:00.000000",
  "modified_by": "Administrator",
  "module": "Transport",
  "name": "Trip Feedback",

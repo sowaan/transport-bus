@@ -1,0 +1,169 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "format:CM-{vehicle_category}-{seating_capacity}-{ownership_type}",
+ "creation": "2026-10-11 22:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "vehicle_section",
+  "vehicle_category",
+  "seating_capacity",
+  "ownership_type",
+  "column_break_vehicle",
+  "vehicle_class",
+  "fuel_type",
+  "fuel_mileage_km_per_litre",
+  "cost_section",
+  "monthly_vehicle_cost",
+  "monthly_driver_salary",
+  "monthly_room_rent",
+  "column_break_cost",
+  "monthly_maintenance",
+  "monthly_salik_toll_parking",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "vehicle_section",
+   "fieldtype": "Section Break",
+   "label": "Vehicle"
+  },
+  {
+   "fieldname": "vehicle_category",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Vehicle Category",
+   "options": "Passenger\nGoods\nDouble Cabin",
+   "reqd": 1
+  },
+  {
+   "fieldname": "seating_capacity",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Seating Capacity",
+   "options": "5\n7\n9\n12\n13\n14\n26\n33\n34\n55\n65\n66",
+   "reqd": 1
+  },
+  {
+   "fieldname": "ownership_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Ownership",
+   "options": "Company-Owned\nExternal Supplier",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_vehicle",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Light or heavy motor vehicle - decides which average driver salary in Transport Settings applies.",
+   "fieldname": "vehicle_class",
+   "fieldtype": "Select",
+   "label": "Licence Class",
+   "options": "LMV (Light Motor Vehicle)\nHMV (Heavy Motor Vehicle)",
+   "reqd": 1
+  },
+  {
+   "fieldname": "fuel_type",
+   "fieldtype": "Select",
+   "label": "Fuel Type",
+   "options": "Petrol\nDiesel",
+   "reqd": 1
+  },
+  {
+   "description": "Used with the monthly fuel price: litres = kilometres / mileage.",
+   "fieldname": "fuel_mileage_km_per_litre",
+   "fieldtype": "Float",
+   "label": "Mileage (km per litre)",
+   "reqd": 1
+  },
+  {
+   "fieldname": "cost_section",
+   "fieldtype": "Section Break",
+   "label": "Monthly Costs (AED)"
+  },
+  {
+   "description": "Company-owned: the monthly EMI or cost. External supplier: what the supplier charges.",
+   "fieldname": "monthly_vehicle_cost",
+   "fieldtype": "Currency",
+   "label": "Vehicle Rent / EMI / Supplier Price"
+  },
+  {
+   "description": "Leave blank to use the average for this licence class in Transport Settings.",
+   "fieldname": "monthly_driver_salary",
+   "fieldtype": "Currency",
+   "label": "Driver Salary"
+  },
+  {
+   "fieldname": "monthly_room_rent",
+   "fieldtype": "Currency",
+   "label": "Room Rent"
+  },
+  {
+   "fieldname": "column_break_cost",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "monthly_maintenance",
+   "fieldtype": "Currency",
+   "label": "Maintenance"
+  },
+  {
+   "fieldname": "monthly_salik_toll_parking",
+   "fieldtype": "Currency",
+   "label": "Salik / Toll / Parking"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-10-11 22:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Transport",
+ "name": "Transport Cost Master",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Transport Accounts",
+   "write": 1
+  },
+  {
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Transport Operations"
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

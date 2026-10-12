@@ -1,0 +1,44 @@
+{
+ "cards": [
+  {
+   "card": "Transport Revenue This Month"
+  },
+  {
+   "card": "Direct Cost This Month"
+  },
+  {
+   "card": "Pending Invoices Amount"
+  },
+  {
+   "card": "Loss-Making Projects"
+  },
+  {
+   "card": "Fleet Utilization Percent"
+  },
+  {
+   "card": "Idle Vehicles 7 Days"
+  },
+  {
+   "card": "Idle Drivers 7 Days"
+  },
+  {
+   "card": "Documents Expiring or Expired"
+  },
+  {
+   "card": "Vehicles Over Fuel Limit"
+  }
+ ],
+ "charts": [],
+ "creation": "2026-10-11 22:00:00.000000",
+ "dashboard_name": "Transport Management",
+ "docstatus": 0,
+ "doctype": "Dashboard",
+ "idx": 0,
+ "is_default": 0,
+ "is_standard": 1,
+ "modified": "2026-10-11 22:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Transport",
+ "name": "Transport Management",
+ "owner": "Administrator"
+}

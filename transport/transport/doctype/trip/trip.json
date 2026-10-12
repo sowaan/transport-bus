@@ -6,11 +6,20 @@
  "engine": "InnoDB",
  "field_order": [
   "schedule_section",
+  "trip_title",
   "project",
   "customer",
+  "sales_order",
+  "no_of_passengers",
   "column_break_schedule",
   "trip_schedule",
   "is_additional",
+  "shift",
+  "duty_basis",
+  "contact_section",
+  "customer_contact_name",
+  "column_break_contact",
+  "customer_contact_mobile",
   "route_section",
   "route",
   "direction",
@@ -29,6 +38,8 @@
   "assignment_section",
   "vehicle",
   "vehicle_class",
+  "vehicle_type",
+  "seating_capacity",
   "column_break_assignment",
   "driver",
   "duty_type",
@@ -159,7 +170,8 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Trip Date",
-   "reqd": 1
+   "reqd": 1,
+   "search_index": 1
   },
   {
    "fieldname": "scheduled_time",
@@ -197,7 +209,8 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Vehicle",
-   "options": "Rental Vehicle"
+   "options": "Rental Vehicle",
+   "search_index": 1
   },
   {
    "fetch_from": "vehicle.vehicle_class",
@@ -356,12 +369,87 @@
    "fieldtype": "Float",
    "label": "Duration (hrs)",
    "read_only": 1
+  },
+  {
+   "description": "From → To, date and leg. Built on save so a Trip can be recognised without its number.",
+   "fieldname": "trip_title",
+   "fieldtype": "Data",
+   "label": "Trip Name",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fetch_from": "project.sales_order",
+   "fieldname": "sales_order",
+   "fieldtype": "Link",
+   "label": "Sales Order",
+   "options": "Sales Order",
+   "read_only": 1
+  },
+  {
+   "fieldname": "no_of_passengers",
+   "fieldtype": "Int",
+   "label": "No. of Passengers",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "shift",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Shift",
+   "options": "\nMorning\nAfternoon\nEvening\nNight"
+  },
+  {
+   "description": "Trip basis or Hour basis - set on the Project. It decides how overtime is counted.",
+   "fetch_from": "project.transport_duty_basis",
+   "fieldname": "duty_basis",
+   "fieldtype": "Data",
+   "label": "Duty Basis",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "contact_section",
+   "fieldtype": "Section Break",
+   "label": "Customer Operations Contact"
+  },
+  {
+   "fetch_from": "project.transport_ops_contact_name",
+   "fieldname": "customer_contact_name",
+   "fieldtype": "Data",
+   "label": "In-charge Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_contact",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fetch_from": "project.transport_ops_contact_mobile",
+   "fieldname": "customer_contact_mobile",
+   "fieldtype": "Data",
+   "label": "In-charge Mobile",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "vehicle.vehicle_type",
+   "fieldname": "vehicle_type",
+   "fieldtype": "Data",
+   "label": "Vehicle Type",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "vehicle.seating_capacity",
+   "fieldname": "seating_capacity",
+   "fieldtype": "Data",
+   "label": "Seating Capacity",
+   "read_only": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-09-22 15:52:39.897662",
+ "modified": "2026-10-11 22:00:00.000000",
  "modified_by": "Administrator",
  "module": "Transport",
  "name": "Trip",
@@ -403,9 +491,11 @@
   }
  ],
  "row_format": "Dynamic",
+ "search_fields": "project,route,driver,vehicle,trip_date",
+ "show_title_field_in_link": 1,
  "sort_field": "trip_date",
  "sort_order": "DESC",
  "states": [],
- "title_field": "route",
+ "title_field": "trip_title",
  "track_changes": 1
 }

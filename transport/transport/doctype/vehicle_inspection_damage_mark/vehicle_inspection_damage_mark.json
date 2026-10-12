@@ -1,0 +1,55 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-10-11 22:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "panel",
+  "mark",
+  "remarks"
+ ],
+ "fields": [
+  {
+   "columns": 4,
+   "fieldname": "panel",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Panel",
+   "options": "Front Bumper\nBonnet\nWindscreen\nRoof\nBoot\nRear Bumper\nLeft Front Door\nLeft Rear Door\nRight Front Door\nRight Rear Door\nLeft Wing\nRight Wing\nHeadlights\nWheels / Caps\nInterior\nOther",
+   "reqd": 1
+  },
+  {
+   "columns": 2,
+   "fieldname": "mark",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Mark",
+   "options": "Scratch\nDent\nBroken",
+   "reqd": 1
+  },
+  {
+   "columns": 4,
+   "fieldname": "remarks",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Remarks"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-10-11 22:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Transport",
+ "name": "Vehicle Inspection Damage Mark",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "idx",
+ "sort_order": "ASC",
+ "states": [],
+ "track_changes": 0
+}

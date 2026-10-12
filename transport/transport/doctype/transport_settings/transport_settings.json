@@ -52,7 +52,30 @@
   "portal_signin_console_url",
   "sweep_status_section",
   "last_operator_sweep_on",
-  "last_operator_sweep_note"
+  "last_operator_sweep_note",
+  "alerts_section",
+  "expiry_alert_days",
+  "asateel_permit_alert_days",
+  "column_break_alerts",
+  "po_expiry_alert_days",
+  "po_consumed_alert_percent",
+  "monthly_round_trip_threshold",
+  "auto_create_timesheet_on_approval",
+  "restrict_trip_places_to_project",
+  "require_daily_inspection_before_trip",
+  "fortnightly_inspection_days",
+  "require_budget_on_sales_order",
+  "service_reminder_days",
+  "rate_defaults_section",
+  "avg_driver_salary_lmv",
+  "avg_driver_salary_hmv",
+  "column_break_rate_defaults",
+  "road_distance_factor",
+  "request_invoice_section",
+  "transport_request_company",
+  "column_break_request_invoice",
+  "transport_request_item",
+  "transport_request_tax_template"
  ],
  "fields": [
   {
@@ -398,13 +421,151 @@
    "fieldtype": "Link",
    "label": "Extra KM Charge Item",
    "options": "Item"
+  },
+  {
+   "fieldname": "alerts_section",
+   "fieldtype": "Section Break",
+   "label": "Expiry & Alert Reminders"
+  },
+  {
+   "default": "30,15,7",
+   "description": "Comma-separated days before expiry at which a reminder goes out - once per day-mark, and again from zero if the date passes. 30,15,7 = one month, 15 days, one week.",
+   "fieldname": "expiry_alert_days",
+   "fieldtype": "Data",
+   "label": "Expiry Alert Days"
+  },
+  {
+   "default": "15",
+   "fieldname": "asateel_permit_alert_days",
+   "fieldtype": "Data",
+   "label": "Asateel Permit Alert Days"
+  },
+  {
+   "fieldname": "column_break_alerts",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "30",
+   "fieldname": "po_expiry_alert_days",
+   "fieldtype": "Int",
+   "label": "Customer PO Expiry Alert (days before)"
+  },
+  {
+   "default": "80",
+   "description": "Alert Accounts and Operations once this share of a transport Sales Order has been invoiced.",
+   "fieldname": "po_consumed_alert_percent",
+   "fieldtype": "Int",
+   "label": "Customer PO Consumed Alert (%)"
+  },
+  {
+   "default": "7",
+   "fieldname": "service_reminder_days",
+   "fieldtype": "Int",
+   "label": "Service Reminder (days before due)"
+  },
+  {
+   "default": "10",
+   "description": "A timesheet with fewer round trips than this is billed per trip at the Project's Rate per Round Trip. 0 switches the rule off.",
+   "fieldname": "monthly_round_trip_threshold",
+   "fieldtype": "Int",
+   "label": "Monthly Round Trips Threshold"
+  },
+  {
+   "default": "1",
+   "description": "Approving a trip puts it on the project's Draft Timesheet for the month, creating one if needed.",
+   "fieldname": "auto_create_timesheet_on_approval",
+   "fieldtype": "Check",
+   "label": "Create Timesheet When a Trip is Approved"
+  },
+  {
+   "default": "1",
+   "description": "A Trip may only run between places the Project knows: its routes and shift pickup/drop points (a trip with stops is not held to this). Switch off for a project that genuinely roams.",
+   "fieldname": "restrict_trip_places_to_project",
+   "fieldtype": "Check",
+   "label": "Keep Trips Within the Project's Locations"
+  },
+  {
+   "description": "Off by default. When on, a transport Sales Order cannot be submitted until its Project has an approved Budget.",
+   "fieldname": "require_budget_on_sales_order",
+   "fieldtype": "Check",
+   "label": "Require a Budget on Transport Sales Orders"
+  },
+  {
+   "fieldname": "rate_defaults_section",
+   "fieldtype": "Section Break",
+   "label": "Rate Calculation Defaults"
+  },
+  {
+   "description": "Used when a Cost Master has no salary of its own.",
+   "fieldname": "avg_driver_salary_lmv",
+   "fieldtype": "Currency",
+   "label": "Average Driver Salary - LMV (monthly)"
+  },
+  {
+   "fieldname": "avg_driver_salary_hmv",
+   "fieldtype": "Currency",
+   "label": "Average Driver Salary - HMV (monthly)"
+  },
+  {
+   "fieldname": "column_break_rate_defaults",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1.3",
+   "description": "When no Route records the distance, it is estimated as the straight line between the two Places' coordinates times this.",
+   "fieldname": "road_distance_factor",
+   "fieldtype": "Float",
+   "label": "Road Distance Factor"
+  },
+  {
+   "fieldname": "request_invoice_section",
+   "fieldtype": "Section Break",
+   "label": "Transport Request Invoicing"
+  },
+  {
+   "description": "The company that raises the month-end invoices for Transport Requests.",
+   "fieldname": "transport_request_company",
+   "fieldtype": "Link",
+   "label": "Invoicing Company",
+   "options": "Company"
+  },
+  {
+   "fieldname": "column_break_request_invoice",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "The item on the monthly request invoice, e.g. Recharge Income - Office & Admin. Falls back to the Transport Service Item.",
+   "fieldname": "transport_request_item",
+   "fieldtype": "Link",
+   "label": "Invoice Item",
+   "options": "Item"
+  },
+  {
+   "description": "Applied to the monthly request invoice when the customer and company have no default, e.g. UAE VAT 5%.",
+   "fieldname": "transport_request_tax_template",
+   "fieldtype": "Link",
+   "label": "Invoice Tax Template",
+   "options": "Sales Taxes and Charges Template"
+  },
+  {
+   "description": "Off by default. When on, a driver cannot start a trip from the portal until today's daily vehicle inspection for that vehicle is recorded.",
+   "fieldname": "require_daily_inspection_before_trip",
+   "fieldtype": "Check",
+   "label": "Driver Must Inspect the Vehicle Before Starting a Trip"
+  },
+  {
+   "default": "15",
+   "description": "Operations is reminded of any vehicle with no fortnightly inspection in this many days.",
+   "fieldname": "fortnightly_inspection_days",
+   "fieldtype": "Int",
+   "label": "Operations Inspection Every (days)"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-09-01 12:00:00.000000",
+ "modified": "2026-10-11 22:00:00.000000",
  "modified_by": "Administrator",
  "module": "Transport",
  "name": "Transport Settings",

@@ -9,11 +9,15 @@
   "vehicle_section",
   "vehicle_category",
   "seating_capacity",
+  "ownership_type",
   "qty",
   "column_break_vehicle",
   "with_driver",
   "with_fuel",
   "route_section",
+  "from_place",
+  "to_place",
+  "distance_note",
   "route_from",
   "route_to",
   "weekend_trips",
@@ -36,6 +40,7 @@
   "total_estimated_cost",
   "cost_per_trip",
   "price_section",
+  "required_margin_percent",
   "minimum_margin_percent",
   "minimum_price",
   "margin_percent",
@@ -318,18 +323,50 @@
    "read_only": 1
   },
   {
+   "description": "Actual margin this row earns on its cost, after any discount. Same basis as Minimum Margin % above, so the two are directly comparable: equal means the row is priced exactly at its floor, lower means it is below it.",
    "fieldname": "margin_percent",
    "fieldtype": "Percent",
-   "label": "Margin %",
-   "read_only": 1,
    "in_list_view": 1,
-   "description": "Actual margin this row earns on its cost, after any discount. Same basis as Minimum Margin % above, so the two are directly comparable: equal means the row is priced exactly at its floor, lower means it is below it."
+   "label": "Margin %",
+   "read_only": 1
+  },
+  {
+   "description": "Picks which Cost Master the costs come from.",
+   "fieldname": "ownership_type",
+   "fieldtype": "Select",
+   "label": "Ownership",
+   "options": "\nCompany-Owned\nExternal Supplier"
+  },
+  {
+   "description": "Choose both places and the distance fills in.",
+   "fieldname": "from_place",
+   "fieldtype": "Link",
+   "label": "From (Place)",
+   "options": "Place"
+  },
+  {
+   "fieldname": "to_place",
+   "fieldtype": "Link",
+   "label": "To (Place)",
+   "options": "Place"
+  },
+  {
+   "fieldname": "distance_note",
+   "fieldtype": "Data",
+   "label": "Distance Source",
+   "read_only": 1
+  },
+  {
+   "description": "Fill this and the Proposed Price below is worked out from this row's cost. Clear it to type a price yourself.",
+   "fieldname": "required_margin_percent",
+   "fieldtype": "Percent",
+   "label": "Required Margin %"
   }
  ],
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-09-05 12:26:58.089077",
+ "modified": "2026-10-11 22:00:00.000000",
  "modified_by": "Administrator",
  "module": "Transport",
  "name": "Transport Rate Calculation Vehicle",

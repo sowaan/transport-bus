@@ -17,6 +17,10 @@
   "plate_text",
   "vehicle",
   "tag_number",
+  "match_section",
+  "trip",
+  "project",
+  "match_basis",
   "gate_section",
   "gate",
   "direction",
@@ -27,27 +31,27 @@
   {
    "fieldname": "authority",
    "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
    "label": "Authority",
    "options": "Salik\nDarb",
-   "reqd": 1,
-   "in_list_view": 1,
-   "in_standard_filter": 1
+   "reqd": 1
   },
   {
+   "description": "The portal's own id for the crossing",
    "fieldname": "transaction_id",
    "fieldtype": "Data",
-   "label": "Transaction ID",
-   "reqd": 1,
    "in_list_view": 1,
-   "description": "The portal's own id for the crossing"
+   "label": "Transaction ID",
+   "reqd": 1
   },
   {
+   "description": "Local UAE time",
    "fieldname": "crossed_on",
    "fieldtype": "Datetime",
-   "label": "Crossed On",
-   "reqd": 1,
    "in_list_view": 1,
-   "description": "Local UAE time"
+   "label": "Crossed On",
+   "reqd": 1
   },
   {
    "fieldname": "posted_on",
@@ -59,12 +63,12 @@
    "fieldtype": "Column Break"
   },
   {
+   "description": "Total including VAT as shown by the portal; 0.00 is valid",
    "fieldname": "amount",
    "fieldtype": "Currency",
-   "label": "Amount (AED)",
-   "options": "AED",
    "in_list_view": 1,
-   "description": "Total including VAT as shown by the portal; 0.00 is valid"
+   "label": "Amount (AED)",
+   "options": "AED"
   },
   {
    "fieldname": "fetched_on",
@@ -78,12 +82,12 @@
    "label": "Vehicle"
   },
   {
+   "description": "As printed on the portal",
    "fieldname": "plate_text",
    "fieldtype": "Data",
-   "label": "Plate",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "description": "As printed on the portal"
+   "label": "Plate"
   },
   {
    "fieldname": "vehicle",
@@ -116,15 +120,43 @@
    "fieldtype": "Column Break"
   },
   {
+   "description": "Portal label, e.g. Mon-Sat, Low-Peak",
    "fieldname": "toll_schedule",
    "fieldtype": "Data",
-   "label": "Toll Schedule",
-   "description": "Portal label, e.g. Mon-Sat, Low-Peak"
+   "label": "Toll Schedule"
+  },
+  {
+   "fieldname": "match_section",
+   "fieldtype": "Section Break",
+   "label": "Matched To"
+  },
+  {
+   "fieldname": "trip",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Trip",
+   "options": "Trip",
+   "read_only": 1
+  },
+  {
+   "fieldname": "project",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Project",
+   "options": "Project",
+   "read_only": 1
+  },
+  {
+   "description": "Trip time: the crossing fell inside the trip's actual start and end. Only trip that day: the vehicle ran that one trip that day.",
+   "fieldname": "match_basis",
+   "fieldtype": "Data",
+   "label": "Matched By",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-10-10 10:00:00.000000",
+ "modified": "2026-10-11 22:00:00.000000",
  "modified_by": "Administrator",
  "module": "Transport",
  "name": "Toll Crossing",
@@ -132,24 +164,24 @@
  "permissions": [
   {
    "delete": 1,
+   "export": 1,
    "print": 1,
    "read": 1,
    "report": 1,
-   "export": 1,
    "role": "System Manager"
   },
   {
+   "export": 1,
    "print": 1,
    "read": 1,
    "report": 1,
-   "export": 1,
    "role": "Transport Accounts"
   },
   {
+   "export": 1,
    "print": 1,
    "read": 1,
    "report": 1,
-   "export": 1,
    "role": "Transport Operations"
   }
  ],

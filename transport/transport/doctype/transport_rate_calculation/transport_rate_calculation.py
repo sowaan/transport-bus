@@ -92,6 +92,14 @@ class TransportRateCalculation(Document):
 				else 0
 			)
 
+			# "Show us the proposed price when we fill the required margin": a
+			# margin typed on the row prices it from that row's own cost. Cleared,
+			# the price is whatever the estimator types.
+			if flt(row.required_margin_percent):
+				row.proposed_price = flt(
+					row.total_estimated_cost * (1 + flt(row.required_margin_percent) / 100), 2
+				)
+
 			if not row.minimum_margin_percent:
 				row.minimum_margin_percent = default_margin or 0
 
@@ -248,3 +256,138 @@ class TransportRateCalculation(Document):
 
 		self.db_set("quotation", quotation.name)
 		return quotation.name
+
+
+# --------------------------------------------------------------------------
+# Cost Master lookup and distance - what fills a vehicle row in
+# --------------------------------------------------------------------------
+
+
+def find_cost_master(vehicle_category, seating_capacity, ownership_type):
+	"""The Cost Master for a vehicle, else None. An exact match on ownership wins;
+	with none, the company-owned master stands in (the cheaper, more common case),
+	then any master for that category and seating."""
+	if not (vehicle_category and seating_capacity):
+		return None
+
+	base = {"vehicle_category": vehicle_category, "seating_capacity": str(seating_capacity)}
+	for ownership in (ownership_type, "Company-Owned", None):
+		filters = dict(base)
+		if ownership:
+			filters["ownership_type"] = ownership
+		name = frappe.db.get_value("Transport Cost Master", filters, "name")
+		if name:
+			return frappe.get_doc("Transport Cost Master", name)
+	return None
+
+
+def get_fuel_price(fuel_type, on_date=None):
+	"""The latest price per litre on or before `on_date`, as (price, effective_from)."""
+	row = frappe.db.get_value(
+		"Transport Fuel Price",
+		{"fuel_type": fuel_type, "effective_from": ("<=", on_date or nowdate())},
+		["price_per_litre", "effective_from"],
+		order_by="effective_from desc",
+		as_dict=True,
+	)
+	return (flt(row.price_per_litre), row.effective_from) if row else (0.0, None)
+
+
+@frappe.whitelist()
+def get_cost_defaults(
+	vehicle_category=None,
+	seating_capacity=None,
+	ownership_type=None,
+	with_driver=None,
+	with_fuel=None,
+	km_per_day=None,
+	working_days_per_month=None,
+	on_date=None,
+):
+	"""The monthly costs a vehicle row would start from, with where each came from.
+
+	Only costs the supply terms allow are returned - a vehicle supplied without a
+	driver gets no salary or room rent, one supplied without fuel gets no fuel -
+	so what comes back never trips the Cost Contradicts Supply Terms check. Fuel
+	is worked out, not looked up: kilometres a month divided by the vehicle's
+	mileage, times the pump price on the calculation's date."""
+	frappe.has_permission("Transport Rate Calculation", "read", throw=True)
+
+	master = find_cost_master(vehicle_category, seating_capacity, ownership_type)
+	if not master:
+		return {"found": False, "message": _("No Cost Master for {0}, {1} seats yet - add one under Transport Cost Master.").format(
+			vehicle_category or "?", seating_capacity or "?")}
+
+	settings = frappe.get_single("Transport Settings")
+	days = cint(working_days_per_month) or DEFAULT_WORKING_DAYS
+	values = {"vehicle_rental_cost": flt(master.monthly_vehicle_cost)}
+	notes = [_("Cost Master {0}").format(master.name)]
+
+	if with_driver == "With Driver":
+		heavy = (master.vehicle_class or "").startswith("HMV")
+		salary = flt(master.monthly_driver_salary) or flt(
+			settings.avg_driver_salary_hmv if heavy else settings.avg_driver_salary_lmv
+		)
+		values["driver_salary_cost"] = salary
+		values["room_rent_cost"] = flt(master.monthly_room_rent)
+		if not salary:
+			notes.append(_("no average {0} driver salary set in Transport Settings").format("HMV" if heavy else "LMV"))
+
+	if with_fuel == "With Fuel":
+		monthly_km = flt(km_per_day) * days
+		price, effective = get_fuel_price(master.fuel_type, on_date)
+		if not monthly_km:
+			notes.append(_("fuel waits for the kilometres per day"))
+		elif not price:
+			notes.append(_("no {0} price on or before this date - add one under Transport Fuel Price").format(master.fuel_type))
+		else:
+			litres = monthly_km / flt(master.fuel_mileage_km_per_litre)
+			values["fuel_cost"] = flt(litres * price, 2)
+			notes.append(_("fuel: {0} L at {1} ({2})").format(round(litres), price, frappe.utils.formatdate(effective)))
+
+	values["maintenance_cost"] = flt(master.monthly_maintenance)
+	values["salik_toll_parking_cost"] = flt(master.monthly_salik_toll_parking)
+
+	return {"found": True, "master": master.name, "values": values, "notes": notes}
+
+
+@frappe.whitelist()
+def get_route_distance(from_place, to_place):
+	"""One-way kilometres between two Places, and where the figure came from.
+
+	A Route that already joins them (either way round) is the best source - it is
+	a distance somebody entered. Failing that, both Places' coordinates give a
+	straight-line distance, scaled by the Road Distance Factor in Transport
+	Settings to approximate driving. That is an estimate and is labelled as one;
+	it is the estimator's number to correct, not the system's to trust."""
+	frappe.has_permission("Transport Rate Calculation", "read", throw=True)
+	if not (from_place and to_place):
+		return {"km": None}
+	if from_place == to_place:
+		return {"km": None, "note": _("From and To are the same place")}
+
+	for a, b in ((from_place, to_place), (to_place, from_place)):
+		route = frappe.db.get_value(
+			"Route", {"from_place": a, "to_place": b, "standard_km": (">", 0)}, ["name", "standard_km"], as_dict=True
+		)
+		if route:
+			return {"km": flt(route.standard_km, 1), "note": _("Route {0}").format(route.name)}
+
+	places = {
+		p.name: p
+		for p in frappe.get_all(
+			"Place", filters={"name": ("in", [from_place, to_place])}, fields=["name", "latitude", "longitude"]
+		)
+	}
+	a, b = places.get(from_place), places.get(to_place)
+	if a and b and a.latitude and a.longitude and b.latitude and b.longitude:
+		from transport.transport.driver_portal import haversine_distance_meters
+
+		factor = flt(frappe.db.get_single_value("Transport Settings", "road_distance_factor")) or 1.3
+		straight_km = haversine_distance_meters(a.latitude, a.longitude, b.latitude, b.longitude) / 1000
+		return {
+			"km": flt(straight_km * factor, 1),
+			"note": _("Estimate: {0} km in a straight line x {1}").format(round(straight_km, 1), factor),
+		}
+
+	return {"km": None, "note": _("No Route or Place coordinates for this pair - enter the kilometres")}
