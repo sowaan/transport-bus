@@ -1837,6 +1837,29 @@ def get_portal_session_status(portal):
 		frappe.throw(_("Not permitted"), frappe.PermissionError)
 
 	portal_doc = frappe.get_doc("Traffic Fine Portal", portal)
+
+	# Toll and permit readers are not fetchers. Asking the fines registry for one
+	# would raise "Portal Not Supported" - and frappe.throw queues its popup even
+	# when the exception is caught below - for a portal that reads fine.
+	other_reader = crossing_reader_for(portal_doc) or permit_reader_for(portal_doc)
+	if other_reader:
+		what = "toll crossings" if crossing_reader_for(portal_doc) else "vehicle permits"
+		return {
+			"state": "client_reader",
+			"usable": False,
+			"fetch_implemented": False,
+			"client_fetch_available": True,
+			"can_capture": False,
+			"can_run_sync": False,
+			"can_capture_public": False,
+			"indicator": "blue",
+			"message": _(
+				"{0} lists {1}, not fines. It is read in your own browser: press Fetch Fines "
+				"In This Browser, sign in on the portal's page, and the extension reads the "
+				"list back. Nothing is invoiced from it."
+			).format(portal_doc.name, what),
+		}
+
 	try:
 		fetcher = get_fetcher(portal_doc)
 	except Exception:
