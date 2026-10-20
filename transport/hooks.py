@@ -342,8 +342,14 @@ doc_events = {
 	# invoice left the fine claiming it was billed and refusing to raise
 	# another - see transport/transport/fine_invoice.py.
 	"Purchase Invoice": {
-		"on_cancel": "transport.transport.fine_invoice.refresh_fine_on_cancel",
-		"on_trash": "transport.transport.fine_invoice.refresh_fine_on_trash",
+		"on_cancel": [
+			"transport.transport.fine_invoice.refresh_fine_on_cancel",
+			"transport.transport.toll_invoice.refresh_crossings_on_cancel",
+		],
+		"on_trash": [
+			"transport.transport.fine_invoice.refresh_fine_on_trash",
+			"transport.transport.toll_invoice.refresh_crossings_on_trash",
+		],
 	},
 }
 

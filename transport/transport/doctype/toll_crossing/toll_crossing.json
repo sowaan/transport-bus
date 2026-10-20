@@ -25,7 +25,9 @@
   "gate",
   "direction",
   "column_break_2",
-  "toll_schedule"
+  "toll_schedule",
+  "billing_section",
+  "purchase_invoice"
  ],
  "fields": [
   {
@@ -152,11 +154,28 @@
    "fieldtype": "Data",
    "label": "Matched By",
    "read_only": 1
+  },
+  {
+   "fieldname": "billing_section",
+   "fieldtype": "Section Break",
+   "label": "Billing"
+  },
+  {
+   "description": "The Purchase Invoice that bills this crossing. Cleared if that invoice is cancelled or deleted, so the crossing can be billed again.",
+   "fieldname": "purchase_invoice",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Purchase Invoice",
+   "no_copy": 1,
+   "options": "Purchase Invoice",
+   "read_only": 1,
+   "search_index": 1
   }
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-10-11 22:00:00.000000",
+ "modified": "2026-10-20 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Transport",
  "name": "Toll Crossing",
