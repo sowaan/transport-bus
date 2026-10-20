@@ -397,14 +397,16 @@ async function runFetch(request, deskTabId, erpOrigin) {
 		// alone cannot tell those apart - so the lists that yielded nothing are
 		// named rather than folded into the total.
 		const unread = (read.coverage || []).filter((c) => c.read === null);
-		const coverageNote = unread.length
-			? ` Not read: ${unread.map((c) => `${c.list} (${c.reason})`).join(", ")}.`
-			: "";
+		// A list that gave some rows and then stopped: its count is real, its reason is why it is short.
+		const stopped = (read.coverage || []).filter((c) => c.read !== null && c.reason);
+		const coverageNote =
+			(unread.length ? ` Not read: ${unread.map((c) => `${c.list} (${c.reason})`).join(", ")}.` : "") +
+			(stopped.length ? ` Stopped early: ${stopped.map((c) => `${c.list} (${c.reason})`).join(", ")}.` : "");
 
 		return {
 			ok: true,
 			staged: result.staged,
-			truncated: read.truncated || unread.length > 0,
+			truncated: read.truncated || unread.length > 0 || stopped.length > 0,
 			message:
 				(result.message || `${read.rows.length} ${noun} sent to SowaanERP.`) + coverageNote,
 		};

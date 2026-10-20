@@ -115,7 +115,26 @@
 		}
 	}
 
-	/** Every vehicle, or null with the reason it could not be read whole. */
+	/** What the page looked like when a turn did not land, so the report says why. */
+	function pageState(before, turnedFrom) {
+		const now = shown();
+		const next = document.querySelector('ul.pagination button[aria-label="Go to next page"]');
+		return [
+			`pager on page ${activePage()} (was ${turnedFrom})`,
+			!now ? "table empty or gone" : now === before ? "table unchanged" : "table changed",
+			next ? "next arrow still present" : "next arrow gone",
+			document.querySelector(".v-progress-linear, .v-overlay--active, .spinner-border, .loading")
+				? "a loading indicator is showing"
+				: "no loading indicator",
+		].join("; ");
+	}
+
+	/**
+	 * The vehicles read, and the reason the list is not whole (null when it is).
+	 * A read that stops early still returns what it got: a permit expiry only ever
+	 * moves forward and writing it twice changes nothing, so ten good rows are
+	 * worth keeping, and the reason is what stops them passing for the whole fleet.
+	 */
 	async function readVehicles(deadline, progress) {
 		const all = [];
 		const seen = new Set();
@@ -123,17 +142,17 @@
 
 		for (;;) {
 			if (!(await settle(deadline))) {
-				return { rows: null, reason: "the page was still changing when the read ran out of time" };
+				return { rows: all, reason: "the page was still changing when the read ran out of time" };
 			}
 
 			const rows = extractRows();
-			if (rows === null) return { rows: null, reason: "the vehicles table disappeared part-way through" };
+			if (rows === null) return { rows: all, reason: "the vehicles table disappeared part-way through" };
 
 			const bad = rows.filter((row) => !row._ok).length;
 			if (bad) {
 				return {
-					rows: null,
-					reason: `${bad} row(s) did not match the layout this reader was written to, so none were sent`,
+					rows: all,
+					reason: `${bad} row(s) on page ${pages + 1} did not match the layout this reader was written to, so that page and the rest were not read`,
 				};
 			}
 
@@ -142,7 +161,7 @@
 				const signature = JSON.stringify(fields);
 				if (seen.has(signature)) {
 					return {
-						rows: null,
+						rows: all,
 						reason: "the same vehicle appeared twice, so the pager did not turn the page it seemed to",
 					};
 				}
@@ -153,10 +172,10 @@
 			progress({ stage: "reading", message: `Read ${all.length} vehicle(s)…` });
 
 			if (pages >= MAX_PAGES) {
-				return { rows: null, reason: `more than ${MAX_PAGES * 10} vehicles, so the list was read in part` };
+				return { rows: all, reason: `more than ${MAX_PAGES * 10} vehicles, so the list was read in part` };
 			}
 			if (Date.now() > deadline) {
-				return { rows: null, reason: "the read ran out of time with more pages still to read" };
+				return { rows: all, reason: "the read ran out of time with more pages still to read" };
 			}
 
 			const before = shown();
@@ -166,7 +185,7 @@
 
 			const moved = await waitFor(() => activePage() !== turnedFrom && shown() && shown() !== before, PAGE_GRACE_MS);
 			if (!moved) {
-				return { rows: null, reason: `page ${pages + 1} never loaded, so the list was read in part` };
+				return { rows: all, reason: `page ${pages + 1} never loaded, so the list was read in part (${pageState(before, turnedFrom)})` };
 			}
 		}
 
@@ -175,12 +194,12 @@
 		const total = tile("Total Vehicles");
 		if (total !== null && total !== all.length) {
 			return {
-				rows: null,
+				rows: all,
 				reason: `read ${all.length} vehicle(s) but the page says it holds ${total}`,
 			};
 		}
 
-		return { rows: all };
+		return { rows: all, reason: null };
 	}
 
 	chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -255,9 +274,9 @@
 			sendResponse({
 				ok: true,
 				state: "read",
-				rows: rows || [],
-				truncated: rows === null,
-				coverage: [{ list: LIST, read: rows ? rows.length : null, reason: reason || null, window: null }],
+				rows,
+				truncated: !!reason,
+				coverage: [{ list: LIST, read: rows.length, reason: reason || null, window: null }],
 			});
 		})().catch((error) => {
 			sendResponse({ ok: false, state: "error", message: String(error && error.message) });
