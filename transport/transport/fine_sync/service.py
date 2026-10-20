@@ -1287,7 +1287,9 @@ def ingest_client_permits(portal, rows, truncated=0, fetched_at=None):
 	vehicles = {}
 	for permit in permits:
 		key = (permit["emirate"], permit["plate_code"], permit["plate_number"])
-		entry = vehicles.setdefault(key, {"expiry": None, "none": 0, "other": []})
+		entry = vehicles.setdefault(key, {"expiry": None, "none": 0, "other": [], "statuses": set()})
+		if permit.get("vehicle_status"):
+			entry["statuses"].add(permit["vehicle_status"])
 		if permit["permit"] == "active":
 			if not entry["expiry"] or permit["expiry_date"] > entry["expiry"]:
 				entry["expiry"] = permit["expiry_date"]
@@ -1296,11 +1298,54 @@ def ingest_client_permits(portal, rows, truncated=0, fetched_at=None):
 		else:
 			entry["other"].append(permit["permit_text"])
 
-	updated, unchanged, no_permit = 0, 0, 0
-	unmatched, earlier, other, failed = [], [], [], []
+	# The portal's Vehicle Status is written to every MATCHED vehicle on every
+	# read, permit or not - the portal is the authority on it. Only the four
+	# values the field offers are written; any other wording is named in the
+	# summary instead, because the Select would reject it the next time anyone
+	# saved the vehicle. Skipped on a site that has not migrated the field in.
+	status_field = frappe.get_meta("Rental Vehicle").has_field("asateel_vehicle_status")
+	read_at = frappe.utils.now_datetime()
+
+	updated, unchanged, no_permit, statuses = 0, 0, 0, 0
+	unmatched, earlier, other, failed, odd_status = [], [], [], [], []
 
 	def printed(key):
 		return " ".join(part for part in key if part)
+
+	def record_expiry(vehicle, entry):
+		"""Applies the permit expiry and says what happened to it."""
+		if entry["other"] and not entry["expiry"]:
+			return "other"
+		if not entry["expiry"]:
+			return "no_permit"
+
+		current = frappe.db.get_value("Rental Vehicle", vehicle.name, "asateel_permit_expiry")
+		portal_expiry = frappe.utils.getdate(entry["expiry"])
+		if current and frappe.utils.getdate(current) == portal_expiry:
+			return "unchanged"
+		if current and frappe.utils.getdate(current) > portal_expiry:
+			return "earlier"
+
+		frappe.db.set_value("Rental Vehicle", vehicle.name, "asateel_permit_expiry", portal_expiry)
+		# Imported here: it is the Compliance Document sync's own module, and a
+		# failure inside it is this vehicle's failure, not the whole read's.
+		from transport.transport.compliance_sync import upsert_compliance_document
+
+		upsert_compliance_document(
+			"Rental Vehicle",
+			vehicle.name,
+			"Asateel Permit",
+			portal_expiry,
+			document_number=frappe.db.get_value("Rental Vehicle", vehicle.name, "asateel_permit_number"),
+			update=True,
+		)
+		frappe.get_doc("Rental Vehicle", vehicle.name).add_comment(
+			"Info",
+			_("Asateel permit expiry set to {0} from the Asateel portal (was {1}).").format(
+				portal_expiry, current or _("blank")
+			),
+		)
+		return "updated"
 
 	for key, entry in vehicles.items():
 		vehicle = _vehicle_for_plate(key[1], key[2], key[0])
@@ -1308,49 +1353,24 @@ def ingest_client_permits(portal, rows, truncated=0, fetched_at=None):
 			unmatched.append(printed(key))
 			continue
 
-		if entry["other"] and not entry["expiry"]:
-			other.append(f"{printed(key)}: {entry['other'][0]}")
-			continue
-		if not entry["expiry"]:
-			no_permit += 1
-			continue
-
-		current = frappe.db.get_value("Rental Vehicle", vehicle.name, "asateel_permit_expiry")
-		portal_expiry = frappe.utils.getdate(entry["expiry"])
-		if current and frappe.utils.getdate(current) == portal_expiry:
-			unchanged += 1
-			continue
-		if current and frappe.utils.getdate(current) > portal_expiry:
-			earlier.append(printed(key))
-			continue
-
+		# One savepoint per vehicle covers both writes: a vehicle whose permit
+		# fails keeps neither, and the others are unaffected.
 		savepoint = "asateel_permit"
 		frappe.db.savepoint(savepoint)
 		try:
-			frappe.db.set_value(
-				"Rental Vehicle", vehicle.name, "asateel_permit_expiry", portal_expiry
-			)
-			# Imported here: it is the Compliance Document sync's own module, and a
-			# failure inside it is this vehicle's failure, not the whole read's.
-			from transport.transport.compliance_sync import upsert_compliance_document
-
-			upsert_compliance_document(
-				"Rental Vehicle",
-				vehicle.name,
-				"Asateel Permit",
-				portal_expiry,
-				document_number=frappe.db.get_value(
-					"Rental Vehicle", vehicle.name, "asateel_permit_number"
-				),
-				update=True,
-			)
-			frappe.get_doc("Rental Vehicle", vehicle.name).add_comment(
-				"Info",
-				_("Asateel permit expiry set to {0} from the Asateel portal (was {1}).").format(
-					portal_expiry, current or _("blank")
-				),
-			)
-			updated += 1
+			wrote_status = False
+			if status_field:
+				status, unknown = _asateel_vehicle_status(entry["statuses"])
+				if status:
+					frappe.db.set_value(
+						"Rental Vehicle",
+						vehicle.name,
+						{"asateel_vehicle_status": status, "asateel_status_updated_on": read_at},
+					)
+					wrote_status = True
+				elif unknown:
+					odd_status.append(f"{printed(key)}: {unknown}")
+			outcome = record_expiry(vehicle, entry)
 		except Exception:
 			frappe.db.rollback(save_point=savepoint)
 			failed.append(printed(key))
@@ -1358,6 +1378,19 @@ def ingest_client_permits(portal, rows, truncated=0, fetched_at=None):
 				title="Asateel permit sync failed",
 				message=f"Could not record the permit for {vehicle.name}.\n{frappe.get_traceback()}",
 			)
+			continue
+
+		statuses += wrote_status
+		if outcome == "updated":
+			updated += 1
+		elif outcome == "unchanged":
+			unchanged += 1
+		elif outcome == "earlier":
+			earlier.append(printed(key))
+		elif outcome == "no_permit":
+			no_permit += 1
+		else:
+			other.append(f"{printed(key)}: {entry['other'][0]}")
 		if updated and updated % 50 == 0:
 			_checkpoint()
 	_checkpoint()
@@ -1371,6 +1404,13 @@ def ingest_client_permits(portal, rows, truncated=0, fetched_at=None):
 			len(vehicles), updated, unchanged, no_permit
 		)
 	]
+	if statuses:
+		parts.append(_("Asateel Vehicle Status updated on {0} vehicle(s).").format(statuses))
+	if odd_status:
+		parts.append(
+			_("Vehicle Status not one of Approved / Cancelled / Rejected / Registered, so left as it "
+			  "was ({0}): {1}.").format(len(odd_status), listed(odd_status))
+		)
 	if unmatched:
 		parts.append(_("Not matched to a fleet vehicle ({0}): {1}.").format(len(unmatched), listed(unmatched)))
 	if earlier:
@@ -1394,6 +1434,30 @@ def ingest_client_permits(portal, rows, truncated=0, fetched_at=None):
 		"truncated": truncated,
 		"message": " ".join(parts),
 	}
+
+
+ASATEEL_VEHICLE_STATUSES = ("Approved", "Cancelled", "Rejected", "Registered")
+
+
+def _asateel_vehicle_status(texts):
+	"""(status, None) to write, (None, wording) to report, or (None, None) when the
+	page gave no status. Matched case-insensitively onto the field's four options.
+
+	A vehicle listed under several business domains is one vehicle with one
+	status; rows that disagree are reported rather than one picked.
+	"""
+	found = set()
+	for text in texts:
+		folded = " ".join(text.split()).lower()
+		status = next((s for s in ASATEEL_VEHICLE_STATUSES if s.lower() == folded), None)
+		if not status:
+			return None, text
+		found.add(status)
+	if len(found) == 1:
+		return found.pop(), None
+	if found:
+		return None, " / ".join(sorted(found))
+	return None, None
 
 
 def _vehicle_for_printed_plate(plate_text):
