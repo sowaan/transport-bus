@@ -16,7 +16,10 @@ What the page is, read from the saved copy the client sent (2026-10-10):
   Vue/Vuetify single-page app: its own sign-in at the same host, a "Log Out"
   link only once signed in.
 * One row per vehicle: plate (emirate, plate category, number), traffic code,
-  vehicle type, business domain, **Permit Validity**, vehicle status. Ten a
+  vehicle type, business domain, **Permit Validity**, vehicle status. The
+  traffic code is the COMPANY's traffic file number - the same on every row of
+  the client's account (confirmed 2026-10-20 from two saved pages and a
+  screenshot) - so only the plate says which vehicle a row is. Ten a
   page, with a Bootstrap pager (`ul.pagination`) beneath; the page's own tiles
   say how many vehicles and permits there are in all (Total Vehicles, Registered
   Vehicles, Total Permits, Active Permits), which is what the reader checks its
@@ -92,8 +95,10 @@ EXTRACT_ROWS_JS = r"""() => {
 			_permit: text(cells[5]),
 			_status: text(cells[6]),
 		};
-		// False when the row cannot be trusted by position: too few cells, or no
-		// plate or traffic code to say which vehicle it is.
+		// False when the row cannot be trusted by position: too few cells, no plate
+		// to say which vehicle it is, or no number where the traffic code belongs.
+		// (The traffic code is the company's file number, the same on every row:
+		// it checks the columns line up, it does not identify the vehicle.)
 		row._ok = headOk && cells.length >= 8 && !!(row._emirate && row._code && row._number) &&
 			/^\d+$/.test(row._traffic_code);
 		rows.push(row);

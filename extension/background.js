@@ -28,8 +28,10 @@ const INGEST_PERMITS_METHOD = "transport.transport.fine_sync.service.ingest_clie
 
 // What each non-fines kind of portal posts to, and what it calls its rows.
 const KINDS = {
-	crossings: { method: INGEST_CROSSINGS_METHOD, noun: "toll crossing(s)" },
-	permits: { method: INGEST_PERMITS_METHOD, noun: "vehicle(s)" },
+	crossings: { method: INGEST_CROSSINGS_METHOD, noun: "toll crossing(s)", page: "Salik trips page" },
+	// Asateel (asateelplus.itc.gov.ae) is a vehicle permit site and nothing else:
+	// nothing here may call what it shows "fines".
+	permits: { method: INGEST_PERMITS_METHOD, noun: "vehicle(s)", page: "Asateel vehicle permits page" },
 };
 const TARGET_METHOD = "transport.transport.fine_sync.service.get_client_fetch_target";
 
@@ -263,7 +265,7 @@ async function runFetch(request, deskTabId, erpOrigin) {
 	let portalTabId = null;
 
 	try {
-		progress(deskTabId, requestId, "opening", "Opening the fines page…");
+		progress(deskTabId, requestId, "opening", "Opening the portal page…");
 
 		// The server answers with a page to open and a reader to run, or it
 		// refuses and says why. A portal with no reader is refused there, not
@@ -271,6 +273,9 @@ async function runFetch(request, deskTabId, erpOrigin) {
 		// and see", because a reader written for another portal's markup finds
 		// no rows, and no rows is indistinguishable from a fleet with no fines.
 		const target = await fetchTarget(erpOrigin, portal);
+		const kind = KINDS[target.kind] || { method: INGEST_METHOD, noun: "fine(s)", page: "fines page" };
+		const page = kind.page;
+
 		if (!target.url || !target.origin || !target.reader) {
 			return {
 				ok: false,
@@ -287,7 +292,7 @@ async function runFetch(request, deskTabId, erpOrigin) {
 			return {
 				ok: false,
 				message:
-					`This build is not allowed to read ${target.origin}, so the fines page ` +
+					`This build is not allowed to read ${target.origin}, so the ${page} ` +
 					"cannot be opened. The extension needs rebuilding with that address " +
 					"granted - tell the team rather than retrying.",
 			};
@@ -321,7 +326,7 @@ async function runFetch(request, deskTabId, erpOrigin) {
 			target
 		);
 		if (landed === "tab-closed") {
-			return { ok: false, message: "The fines tab was closed before anything was read." };
+			return { ok: false, message: `The ${page} tab was closed before anything was read.` };
 		}
 		if (landed === "timeout") {
 			return {
@@ -330,12 +335,12 @@ async function runFetch(request, deskTabId, erpOrigin) {
 					? "The portal did not load within 90 seconds, so nothing was read. This " +
 					  "needs no sign-in, so it is the site or the connection rather than " +
 					  "anything waiting on you - press the button again."
-					: "The fines page never finished loading. Nothing was read - press Fetch " +
-					  "Fines Now to try again.",
+					: `The ${page} never finished loading. Nothing was read - press the ` +
+					  "button again to try again.",
 			};
 		}
 
-		progress(deskTabId, requestId, "reading", "Reading the fines table…");
+		progress(deskTabId, requestId, "reading", `Reading the ${page}…`);
 
 		// After landing, not before: signing in navigates away and back, and an
 		// injection made earlier would have been torn down with the page it was
@@ -367,7 +372,6 @@ async function runFetch(request, deskTabId, erpOrigin) {
 			return { ok: false, message: describeReadFailure(read && read.state, target) };
 		}
 
-		const kind = KINDS[target.kind] || { method: INGEST_METHOD, noun: "fine(s)" };
 		const noun = kind.noun;
 
 		progress(
@@ -397,11 +401,11 @@ async function runFetch(request, deskTabId, erpOrigin) {
 		// alone cannot tell those apart - so the lists that yielded nothing are
 		// named rather than folded into the total.
 		const unread = (read.coverage || []).filter((c) => c.read === null);
-		// A list that gave some rows and then stopped: its count is real, its reason is why it is short.
+		// A list that gave rows but not all of them: its count is real, its reason says what is missing.
 		const stopped = (read.coverage || []).filter((c) => c.read !== null && c.reason);
 		const coverageNote =
 			(unread.length ? ` Not read: ${unread.map((c) => `${c.list} (${c.reason})`).join(", ")}.` : "") +
-			(stopped.length ? ` Stopped early: ${stopped.map((c) => `${c.list} (${c.reason})`).join(", ")}.` : "");
+			(stopped.length ? ` Incomplete: ${stopped.map((c) => `${c.list} (${c.reason})`).join(", ")}.` : "");
 
 		return {
 			ok: true,
@@ -475,6 +479,7 @@ function describeReadFailure(state, target) {
 			"it may have asked for a sign-in or a challenge in the tab."
 		);
 	}
+	if (target && target.kind === "permits") return "The Asateel vehicle permits page could not be read. Nothing was recorded.";
 	return "The fines page could not be read. Nothing was staged.";
 }
 

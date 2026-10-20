@@ -1,5 +1,5 @@
 // GENERATED FILE - DO NOT EDIT BY HAND.
-// Generated 2026-10-11 from asateel.py, darb.py, rakta.py, rta.py, salik.py, tamm.py
+// Generated 2026-10-20 from asateel.py, darb.py, rakta.py, rta.py, salik.py, tamm.py
 // by extension/tools/generate_extractors.py. Change the constants in those
 // Python modules and re-run the generator; edits made here are lost and,
 // worse, silently diverge from what the server-side fetcher reads.
@@ -58,8 +58,10 @@ globalThis.PORTAL_EXTRACTORS = {
 			_permit: text(cells[5]),
 			_status: text(cells[6]),
 		};
-		// False when the row cannot be trusted by position: too few cells, or no
-		// plate or traffic code to say which vehicle it is.
+		// False when the row cannot be trusted by position: too few cells, no plate
+		// to say which vehicle it is, or no number where the traffic code belongs.
+		// (The traffic code is the company's file number, the same on every row:
+		// it checks the columns line up, it does not identify the vehicle.)
 		row._ok = headOk && cells.length >= 8 && !!(row._emirate && row._code && row._number) &&
 			/^\d+$/.test(row._traffic_code);
 		rows.push(row);

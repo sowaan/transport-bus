@@ -86,12 +86,12 @@
    "reqd": 1
   },
   {
-   "description": "Side registries cover transport or toll violations only and are NOT a substitute for the police traffic-fine registry.",
+   "description": "Side registries cover transport or toll violations only and are NOT a substitute for the police traffic-fine registry. Vehicle Permits (Asateel) lists permits and their expiry dates - no fines and nothing to invoice.",
    "fieldname": "scope",
    "fieldtype": "Select",
    "in_standard_filter": 1,
    "label": "Scope",
-   "options": "Police Traffic Fines\nTransport / Toll Only\nUnified Channel",
+   "options": "Police Traffic Fines\nTransport / Toll Only\nUnified Channel\nVehicle Permits",
    "reqd": 1
   },
   {
@@ -263,7 +263,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-09-19 18:30:00.000000",
+ "modified": "2026-10-20 12:30:00.000000",
  "modified_by": "Administrator",
  "module": "Transport",
  "name": "Traffic Fine Portal",

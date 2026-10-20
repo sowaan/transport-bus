@@ -1849,6 +1849,19 @@ def get_portal_session_status(portal):
 	other_reader = crossing_reader_for(portal_doc) or permit_reader_for(portal_doc)
 	if other_reader:
 		what = "toll crossings" if crossing_reader_for(portal_doc) else "vehicle permits"
+		# Named on the form because the address the extension opens is fixed in
+		# code, not read from this record - a mistyped Public Form URL here was
+		# taken for the address being used.
+		url = other_reader.client_fetch_target()["url"]
+		message = _(
+			"{0} lists {1}, not fines. It is read in your own browser: press Fetch Fines "
+			"In This Browser, sign in on the page it opens ({2}), and the extension reads "
+			"the list back. Nothing is invoiced from it."
+		).format(portal_doc.name, what, url)
+		if portal_doc.public_form_url and not portal_doc.public_form_url.startswith(other_reader.client_origin):
+			message += " " + _(
+				"The Public Form URL on this record ({0}) is not used for this portal."
+			).format(portal_doc.public_form_url)
 		return {
 			"state": "client_reader",
 			"usable": False,
@@ -1858,11 +1871,7 @@ def get_portal_session_status(portal):
 			"can_run_sync": False,
 			"can_capture_public": False,
 			"indicator": "blue",
-			"message": _(
-				"{0} lists {1}, not fines. It is read in your own browser: press Fetch Fines "
-				"In This Browser, sign in on the portal's page, and the extension reads the "
-				"list back. Nothing is invoiced from it."
-			).format(portal_doc.name, what),
+			"message": message,
 		}
 
 	try:

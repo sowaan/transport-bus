@@ -23,8 +23,12 @@
 //    (the Arabic page, or a re-themed one).
 //
 // 4. **It does not wait on a spinner.** The page's loading indicator has not been
-//    seen, so a turned page is recognised by what the table shows: the active
-//    page number moved, the first vehicle changed, and the rows then held still.
+//    seen, so a turned page is recognised by what the table shows: the pager
+//    moved on by one, the vehicles listed changed, and the rows then held still.
+//    "The vehicles listed" means their PLATES. The Traffic Code column is the
+//    company's traffic file number - the same on every row of the client's
+//    account - so it cannot tell one page from the next. Comparing it is what
+//    made every live read stop at page 2.
 //
 // It never signs in, never types a credential and never answers a challenge:
 // the operator does all of that in their own browser.
@@ -79,11 +83,25 @@
 		return Number.isNaN(n) ? null : n;
 	}
 
-	/** What the table shows, as one comparable string: how many rows, which first and last. */
+	/** One vehicle row as a comparable string. The plate says which vehicle it is. */
+	const rowKey = (row) => [row._emirate, row._code, row._number, row._domain, row._permit, row._status].join("/");
+
+	/** What the table shows, as one comparable string - every row, not a sample. */
 	function shown() {
 		const rows = extractRows();
 		if (!rows || !rows.length) return "";
-		return `${rows.length}|${rows[0]._traffic_code}|${rows[rows.length - 1]._traffic_code}`;
+		return rows.map(rowKey).join("|");
+	}
+
+	/**
+	 * How many vehicles the list itself says it holds, or null. The table is drawn
+	 * with its server-side count as an attribute; unlike the "Total Vehicles"
+	 * tile, it counts only this list - this tab, with any filter that is on.
+	 */
+	function listTotal() {
+		const table = document.querySelector(".v-data-table[total]");
+		const n = table ? parseInt(table.getAttribute("total"), 10) : NaN;
+		return Number.isNaN(n) ? null : n;
 	}
 
 	/** The number the page's own tile gives for a label, or null if no such tile. */
@@ -121,7 +139,7 @@
 		const next = document.querySelector('ul.pagination button[aria-label="Go to next page"]');
 		return [
 			`pager on page ${activePage()} (was ${turnedFrom})`,
-			!now ? "table empty or gone" : now === before ? "table unchanged" : "table changed",
+			!now ? "table empty or gone" : now === before ? "table still shows the same vehicles" : "table changed",
 			next ? "next arrow still present" : "next arrow gone",
 			document.querySelector(".v-progress-linear, .v-overlay--active, .spinner-border, .loading")
 				? "a loading indicator is showing"
@@ -139,6 +157,7 @@
 		const all = [];
 		const seen = new Set();
 		let pages = 0;
+		let repeated = 0;
 
 		for (;;) {
 			if (!(await settle(deadline))) {
@@ -156,16 +175,21 @@
 				};
 			}
 
-			for (const row of rows) {
-				const { _ok, ...fields } = row;
-				const signature = JSON.stringify(fields);
-				if (seen.has(signature)) {
-					return {
-						rows: all,
-						reason: "the same vehicle appeared twice, so the pager did not turn the page it seemed to",
-					};
-				}
-				seen.add(signature);
+			// A page made only of vehicles already read means the pager served an
+			// earlier page again. A few repeats on an otherwise new page do not: a
+			// list sorted on a column many rows share can shift a vehicle across a
+			// page boundary. Those are skipped, and the count check below catches any
+			// vehicle the shift pushed off the list instead.
+			const fresh = rows.filter((row) => !seen.has(rowKey(row)));
+			if (!fresh.length) {
+				return {
+					rows: all,
+					reason: `page ${pages + 1} listed only vehicles already read, so the pager did not turn the page it seemed to`,
+				};
+			}
+			repeated += rows.length - fresh.length;
+			for (const row of fresh) {
+				seen.add(rowKey(row));
 				all.push(row);
 			}
 			pages += 1;
@@ -183,19 +207,39 @@
 			// No next arrow left means this was the last page.
 			if (!nextPage()) break;
 
-			const moved = await waitFor(() => activePage() !== turnedFrom && shown() && shown() !== before, PAGE_GRACE_MS);
+			// The pager moves at once; the rows follow when the server answers. Both
+			// have to change - and the pager by exactly one - before the page counts
+			// as turned. Where there is no numbered pager, the rows alone decide.
+			const landed = () => {
+				const now = shown();
+				if (!now || now === before) return false;
+				return turnedFrom === null || activePage() === turnedFrom + 1;
+			};
+			const moved = await waitFor(landed, PAGE_GRACE_MS);
 			if (!moved) {
 				return { rows: all, reason: `page ${pages + 1} never loaded, so the list was read in part (${pageState(before, turnedFrom)})` };
 			}
 		}
 
-		// The page states its own total. A pager that skipped a page, or a filter
-		// left set from an earlier visit, shows up here as a short count.
-		const total = tile("Total Vehicles");
-		if (total !== null && total !== all.length) {
+		const repeats = repeated ? ` (${repeated} repeated row(s) across pages were skipped)` : "";
+
+		// The list states its own count. A pager that skipped a page, or a vehicle
+		// pushed off by a shifting sort, shows up here as a short count.
+		const expected = listTotal();
+		if (expected !== null && expected !== all.length) {
+			return { rows: all, reason: `read ${all.length} vehicle(s) but the list says it holds ${expected}${repeats}` };
+		}
+
+		// The tile counts the whole fleet: both tabs, and no filter. A list read
+		// whole that is still shorter means a filter was left on, or the rest are
+		// under Hired Vehicles - either way not the whole fleet.
+		const fleet = tile("Total Vehicles");
+		if (fleet !== null && fleet !== all.length) {
 			return {
 				rows: all,
-				reason: `read ${all.length} vehicle(s) but the page says it holds ${total}`,
+				reason:
+					`read all ${all.length} vehicle(s) in the list shown, but the page counts ${fleet} in all - ` +
+					`a filter may be on, or the rest are under the Hired Vehicles tab${repeats}`,
 			};
 		}
 
@@ -233,13 +277,30 @@
 				return rows && rows.length > 0;
 			}, TABLE_GRACE_MS);
 			if (!drawn) {
-				if (extractRows() !== null && tile("Total Vehicles") === 0) {
+				const fleet = tile("Total Vehicles");
+				if (extractRows() !== null && fleet === 0) {
 					sendResponse({
 						ok: true,
 						state: "read",
 						rows: [],
 						truncated: false,
 						coverage: [{ list: LIST, read: 0, reason: null, window: null }],
+					});
+					return;
+				}
+				// An empty list on a fleet that has vehicles: a filter, or the wrong tab.
+				if (extractRows() !== null && listTotal() === 0 && fleet) {
+					sendResponse({
+						ok: true,
+						state: "read",
+						rows: [],
+						truncated: true,
+						coverage: [{
+							list: LIST,
+							read: 0,
+							reason: `the list shown is empty but the page counts ${fleet} vehicle(s) - a filter may be on, or they are under the Hired Vehicles tab`,
+							window: null,
+						}],
 					});
 					return;
 				}

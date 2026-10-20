@@ -36,7 +36,7 @@
 			// readable refusal on click beats a button that silently never appears.
 			if (!frm.doc.is_enabled) return;
 
-			frm.add_custom_button(__("Fetch Fines In This Browser"), () => start_fetch(frm));
+			frm.add_custom_button(wording(frm).button, () => start_fetch(frm));
 
 			// The bridge announces itself as soon as it loads, which can be before
 			// this script has a listener registered. Asking as well as listening
@@ -48,6 +48,22 @@
 			);
 		},
 	});
+
+	// Not every portal on this doctype lists fines. Asateel (asateelplus.itc.gov.ae)
+	// is a vehicle permit site and Salik lists toll trips; a button that says
+	// "Fetch Fines" on either tells the operator the wrong thing about what will
+	// be read and what it will do. Keyed on the same fetcher_key the server uses
+	// to pick the reader.
+	function wording(frm) {
+		const key = (frm.doc.fetcher_key || "").trim().toLowerCase();
+		if (key === "asateel") {
+			return { button: __("Fetch Vehicle Permits In This Browser"), title: __("Fetching vehicle permits") };
+		}
+		if (key === "salik") {
+			return { button: __("Fetch Toll Crossings In This Browser"), title: __("Fetching toll crossings") };
+		}
+		return { button: __("Fetch Fines In This Browser"), title: __("Fetching fines") };
+	}
 
 	const BRIDGE_FROM_PAGE = "transport-fine-fetch/page";
 	const BRIDGE_FROM_EXTENSION = "transport-fine-fetch/extension";
@@ -120,7 +136,7 @@
 		const request_id = frappe.utils.get_random(12);
 
 		const dialog = new frappe.ui.Dialog({
-			title: __("Fetching fines"),
+			title: wording(frm).title,
 			fields: [{ fieldtype: "HTML", fieldname: "status" }],
 			// No primary action: the operator's next step is in the portal tab, not
 			// in this dialog. Closing it does not stop the fetch.
