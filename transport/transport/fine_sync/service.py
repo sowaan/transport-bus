@@ -392,8 +392,13 @@ def _stage_fine(run, portal_doc, vehicle, fine):
 		# fine's own lifecycle on this doctype, the equivalent is a row still
 		# Unpaid and not yet on an invoice - once either has moved, a person or
 		# the books have a stake in the values and a fetch may not touch them.
-		if existing.status == "Unpaid" and not existing.is_invoiced:
-			_enrich_staging_row(existing.name, vehicle, fine)
+		# What the row says about the fine is filled in whatever its state (see
+		# `_enrich_staging_row`); what moves money or the black-points chain only
+		# while nobody has acted on it.
+		_enrich_staging_row(
+			existing.name, vehicle, fine,
+			untouched=existing.status == "Unpaid" and not existing.is_invoiced,
+		)
 		return False
 
 	doc = frappe.get_doc({
@@ -2372,26 +2377,54 @@ def _record_sweep_note(note, stamp=True):
 		_log_error("Could not record operator sweep note")
 
 
-def _enrich_staging_row(name, vehicle, fine):
-	"""Fill only what the row is still missing, never overwrite."""
+# What a fine says about itself. Reading these later never changes what was
+# billed - the invoice took its own copy when it was raised - so a row that is
+# already invoiced or paid may still learn them.
+DESCRIPTIVE_FIELDS = ("fine_type", "fine_location", "description", "ticket_type", "discount_note")
+
+
+def _enrich_staging_row(name, vehicle, fine, untouched=True):
+	"""Fill only what the row is still missing, never overwrite.
+
+	The descriptive fields (`DESCRIPTIVE_FIELDS`) are filled on any row. That
+	matters because a fine is invoiced the moment it is first saved: a row first
+	seen from the portal's list view alone (no detail panel) is invoiced at once,
+	and used to be barred from enrichment for ever after - so its location, type
+	and description stayed empty however many later fetches did read the panel.
+
+	The rest - vehicle, black points, amounts, the portal's status and source -
+	are filled only while `untouched` (Unpaid and not invoiced), because a person
+	or the books have a stake in those once it has moved."""
 	row = frappe.get_doc("Traffic Fine Staging", name)
 	candidates = {
-		"vehicle": vehicle.name if vehicle else None,
 		"fine_type": fine.fine_type,
 		"fine_location": fine.fine_location,
-		"black_points": fine.black_points or None,
-		"discounted_amount": fine.raw.get("discounted_amount"),
-		"portal_status": fine.raw.get("tamm_status") or fine.raw.get("portal_status"),
 		"description": fine.raw.get("description"),
 		"ticket_type": fine.raw.get("ticket_type"),
-		"source": fine.raw.get("issuing_authority"),
 		"discount_note": fine.raw.get("discount"),
 	}
+	if untouched:
+		candidates.update({
+			"vehicle": vehicle.name if vehicle else None,
+			"black_points": fine.black_points or None,
+			"discounted_amount": fine.raw.get("discounted_amount"),
+			"portal_status": fine.raw.get("tamm_status") or fine.raw.get("portal_status"),
+			"source": fine.raw.get("issuing_authority"),
+		})
 	updates = {
 		field: value
 		for field, value in candidates.items()
 		if value not in (None, "", 0) and not row.get(field)
 	}
+	# db_set below skips validate, which is where the end date is normally read.
+	if updates.get("discount_note") and not row.get("discount_ends_on"):
+		from transport.transport.doctype.traffic_fine_staging.traffic_fine_staging import (
+			parse_discount_end,
+		)
+
+		ends = parse_discount_end(updates["discount_note"])
+		if ends:
+			updates["discount_ends_on"] = ends
 	if updates:
 		row.db_set(updates, update_modified=False)
 

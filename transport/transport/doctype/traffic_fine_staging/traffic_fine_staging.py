@@ -25,6 +25,7 @@ without re-querying the portal.
 """
 
 import json
+import re
 
 import frappe
 from frappe import _
@@ -33,9 +34,45 @@ from frappe.utils import escape_html, flt, getdate
 
 VAT_RATE = 0.05
 
+MONTHS = {m: i for i, m in enumerate(
+	("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"), start=1)}
+# 20 Nov 2026 / 20-Nov-2026 / 20/11/2026 / 2026-11-20. Day first, as the UAE writes it.
+_DATE_PATTERNS = (
+	(re.compile(r"\b(\d{4})-(\d{1,2})-(\d{1,2})\b"), "ymd"),
+	(re.compile(r"\b(\d{1,2})[\s/.\-]+([A-Za-z]{3,9})[\s/.\-,]+(\d{4})\b"), "dmy_name"),
+	(re.compile(r"\b(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{4})\b"), "dmy"),
+)
+
+
+def parse_discount_end(text):
+	"""The calendar date a discount text names, or None.
+
+	Only an explicit date is read. A wording like "within 58 days" is relative to
+	a moment this does not know (issue? first view? today?), and a wrong end date
+	on an unpaid fine is worse than none - the offer text stays on the row for a
+	person to read. When the text names several dates the last is taken, since a
+	"from ... until ..." window ends at its last date."""
+	found = []
+	for pattern, kind in _DATE_PATTERNS:
+		for m in pattern.finditer(text or ""):
+			try:
+				if kind == "ymd":
+					year, month, day = (int(g) for g in m.groups())
+				elif kind == "dmy_name":
+					day, name, year = int(m.group(1)), m.group(2)[:3].lower(), int(m.group(3))
+					month = MONTHS[name]
+				else:
+					day, month, year = (int(g) for g in m.groups())
+				found.append((m.start(), getdate(f"{year:04d}-{month:02d}-{day:02d}")))
+			except (KeyError, ValueError, TypeError, frappe.ValidationError):
+				continue
+	return max(found)[1] if found else None
+
 
 class TrafficFineStaging(Document):
 	def validate(self):
+		if self.discount_note and not self.discount_ends_on:
+			self.discount_ends_on = parse_discount_end(self.discount_note)
 		self.calculate_vat()
 		self.check_duplicate_ticket()
 

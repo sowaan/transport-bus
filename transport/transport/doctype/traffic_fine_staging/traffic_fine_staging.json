@@ -38,6 +38,7 @@
   "amount",
   "discounted_amount",
   "discount_note",
+  "discount_ends_on",
   "add_vat",
   "col_amount",
   "vat_amount",
@@ -342,12 +343,20 @@
    "fieldtype": "Data",
    "label": "Discount Offer",
    "read_only": 1
+  },
+  {
+   "description": "The last day the discounted amount is accepted; after it the full fine is due. Read from the date in the authority's discount text when it states one - left blank, never guessed, when it does not.",
+   "fieldname": "discount_ends_on",
+   "fieldtype": "Date",
+   "in_list_view": 0,
+   "label": "Discount Ends On",
+   "read_only": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-09-19 19:20:00.000000",
+ "modified": "2026-10-20 15:00:00.000000",
  "modified_by": "Administrator",
  "module": "Transport",
  "name": "Traffic Fine Staging",
