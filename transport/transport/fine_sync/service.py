@@ -1298,16 +1298,16 @@ def ingest_client_permits(portal, rows, truncated=0, fetched_at=None):
 		else:
 			entry["other"].append(permit["permit_text"])
 
-	# The portal's Vehicle Status is written to every MATCHED vehicle on every
-	# read, permit or not - the portal is the authority on it. Only the four
-	# values the field offers are written; any other wording is named in the
-	# summary instead, because the Select would reject it the next time anyone
-	# saved the vehicle. Skipped on a site that has not migrated the field in.
+	# The vehicle's Asateel registration is written to every MATCHED vehicle on
+	# every read, permit or not - the portal is the authority on it. The field
+	# holds one value, "Registered": a vehicle the portal shows as Registered gets
+	# it, any other status (or none) clears it and is named in the summary.
+	# Skipped on a site that has not migrated the field in.
 	status_field = frappe.get_meta("Rental Vehicle").has_field("asateel_vehicle_status")
 	read_at = frappe.utils.now_datetime()
 
-	updated, unchanged, no_permit, statuses = 0, 0, 0, 0
-	unmatched, earlier, other, failed, odd_status = [], [], [], [], []
+	updated, unchanged, no_permit, registered = 0, 0, 0, 0
+	unmatched, earlier, other, failed, not_registered = [], [], [], [], []
 
 	def printed(key):
 		return " ".join(part for part in key if part)
@@ -1358,18 +1358,16 @@ def ingest_client_permits(portal, rows, truncated=0, fetched_at=None):
 		savepoint = "asateel_permit"
 		frappe.db.savepoint(savepoint)
 		try:
-			wrote_status = False
+			is_registered = _asateel_registered(entry["statuses"])
 			if status_field:
-				status, unknown = _asateel_vehicle_status(entry["statuses"])
-				if status:
-					frappe.db.set_value(
-						"Rental Vehicle",
-						vehicle.name,
-						{"asateel_vehicle_status": status, "asateel_status_updated_on": read_at},
-					)
-					wrote_status = True
-				elif unknown:
-					odd_status.append(f"{printed(key)}: {unknown}")
+				frappe.db.set_value(
+					"Rental Vehicle",
+					vehicle.name,
+					{
+						"asateel_vehicle_status": "Registered" if is_registered else None,
+						"asateel_status_updated_on": read_at,
+					},
+				)
 			outcome = record_expiry(vehicle, entry)
 		except Exception:
 			frappe.db.rollback(save_point=savepoint)
@@ -1380,7 +1378,12 @@ def ingest_client_permits(portal, rows, truncated=0, fetched_at=None):
 			)
 			continue
 
-		statuses += wrote_status
+		if status_field:
+			if is_registered:
+				registered += 1
+			else:
+				shown = " / ".join(sorted(entry["statuses"])) or _("no status shown")
+				not_registered.append(f"{printed(key)} ({shown})")
 		if outcome == "updated":
 			updated += 1
 		elif outcome == "unchanged":
@@ -1404,12 +1407,13 @@ def ingest_client_permits(portal, rows, truncated=0, fetched_at=None):
 			len(vehicles), updated, unchanged, no_permit
 		)
 	]
-	if statuses:
-		parts.append(_("Asateel Vehicle Status updated on {0} vehicle(s).").format(statuses))
-	if odd_status:
+	if registered:
+		parts.append(_("{0} fleet vehicle(s) Registered on Asateel.").format(registered))
+	if not_registered:
 		parts.append(
-			_("Vehicle Status not one of Approved / Cancelled / Rejected / Registered, so left as it "
-			  "was ({0}): {1}.").format(len(odd_status), listed(odd_status))
+			_("Not Registered on Asateel, so their Asateel Registration was cleared ({0}): {1}.").format(
+				len(not_registered), listed(not_registered)
+			)
 		)
 	if unmatched:
 		parts.append(_("Not matched to a fleet vehicle ({0}): {1}.").format(len(unmatched), listed(unmatched)))
@@ -1436,28 +1440,14 @@ def ingest_client_permits(portal, rows, truncated=0, fetched_at=None):
 	}
 
 
-ASATEEL_VEHICLE_STATUSES = ("Approved", "Cancelled", "Rejected", "Registered")
+def _asateel_registered(texts):
+	"""Whether the portal shows the vehicle as Registered, case and spacing aside.
 
-
-def _asateel_vehicle_status(texts):
-	"""(status, None) to write, (None, wording) to report, or (None, None) when the
-	page gave no status. Matched case-insensitively onto the field's four options.
-
-	A vehicle listed under several business domains is one vehicle with one
-	status; rows that disagree are reported rather than one picked.
+	A vehicle listed under several business domains is one vehicle: it counts as
+	Registered only when every row that gives a status says so.
 	"""
-	found = set()
-	for text in texts:
-		folded = " ".join(text.split()).lower()
-		status = next((s for s in ASATEEL_VEHICLE_STATUSES if s.lower() == folded), None)
-		if not status:
-			return None, text
-		found.add(status)
-	if len(found) == 1:
-		return found.pop(), None
-	if found:
-		return None, " / ".join(sorted(found))
-	return None, None
+	folded = {" ".join(text.split()).lower() for text in texts}
+	return folded == {"registered"}
 
 
 def _vehicle_for_printed_plate(plate_text):
