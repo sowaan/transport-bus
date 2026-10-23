@@ -8,6 +8,7 @@ already valid JavaScript expressions:
     EXTRACT_ROWS_JS   read the rendered fines rows
     NEXT_PAGE_JS      advance the client-side pager
     READ_PANEL_JS     read one fine's detail modal
+    READ_DETAIL_JS    read one vehicle's detail page (Asateel permit number)
 
 The extension needs the same three, and a hand-made copy would drift the first
 time somebody re-themes the portal and fixes only one of the two. So this reads
@@ -32,7 +33,12 @@ WANTED = {
 	"EXTRACT_ROWS_JS": "extractRows",
 	"NEXT_PAGE_JS": "nextPage",
 	"READ_PANEL_JS": "readPanel",
+	"READ_DETAIL_JS": "readDetail",
 }
+
+# What a portal that declares no list is held to: the fines trio. READ_DETAIL_JS
+# is Asateel's alone, and Asateel declares it.
+DEFAULT_EXTRACTORS = ("EXTRACT_ROWS_JS", "NEXT_PAGE_JS", "READ_PANEL_JS")
 
 HERE = pathlib.Path(__file__).resolve().parent
 PORTALS_DIR = HERE.parent.parent / "transport" / "transport" / "fine_sync" / "portals"
@@ -170,7 +176,7 @@ def main():
 		# list only when the machinery genuinely does not exist: RAKTA has no
 		# pager and no detail view, and stub constants standing in for them
 		# would weaken the check for everybody to spare one portal.
-		declared = read_class_tuple(tree, "client_extractors") or list(WANTED)
+		declared = read_class_tuple(tree, "client_extractors") or list(DEFAULT_EXTRACTORS)
 		unknown = [name for name in declared if name not in WANTED]
 		if unknown:
 			sys.exit(

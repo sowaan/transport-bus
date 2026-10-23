@@ -1,5 +1,5 @@
 // GENERATED FILE - DO NOT EDIT BY HAND.
-// Generated 2026-10-20 from asateel.py, darb.py, rakta.py, rta.py, salik.py, tamm.py
+// Generated 2026-10-23 from asateel.py, darb.py, rakta.py, rta.py, salik.py, tamm.py
 // by extension/tools/generate_extractors.py. Change the constants in those
 // Python modules and re-run the generator; edits made here are lost and,
 // worse, silently diverge from what the server-side fetcher reads.
@@ -77,6 +77,36 @@ globalThis.PORTAL_EXTRACTORS = {
 	if (!next || next.disabled || next.getAttribute('aria-disabled') === 'true') return false;
 	next.click();
 	return true;
+},
+
+		// READ_DETAIL_JS
+		readDetail: () => {
+	if (!/\/tpc-portal\/manage-vehicle\/detail\/\d+/.test(location.pathname)) return null;
+	const text = (el) => (el ? el.textContent : '').replace(/\s+/g, ' ').trim();
+
+	// Left card: <div class="view-data"><label>Permit Number</label><p>...</p>.
+	const card = {};
+	for (const box of document.querySelectorAll('.view-data')) {
+		const label = text(box.querySelector('label'));
+		if (label && !(label in card)) card[label] = text(box.querySelector('p'));
+	}
+	if (!('Permit Number' in card)) return null;
+
+	// Basic Information: <div class="info-row"><div class="field-label">...
+	const info = {};
+	for (const row of document.querySelectorAll('.info-row')) {
+		const label = text(row.querySelector('.field-label'));
+		if (label && !(label in info)) info[label] = text(row.querySelector('.field-value'));
+	}
+
+	return {
+		permit_number: card['Permit Number'] || '',
+		expiry: card['Expiry Date'] || '',
+		plate: info['Plate Number'] || card['Plate Number'] || '',
+		emirate: card['Emirates'] || '',
+		category: info['Plate Category'] || '',
+		status: text(document.querySelector('.status-chip')),
+	};
 },
 	},
 

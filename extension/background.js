@@ -372,6 +372,37 @@ async function runFetch(request, deskTabId, erpOrigin) {
 			return { ok: false, message: describeReadFailure(read && read.state, target) };
 		}
 
+		// A reader can ask for a second step once its rows are safely here - the
+		// Asateel reader visits each vehicle's detail page for the permit number.
+		// Sent as its own message because that step navigates: if the page
+		// reloads, the reader goes with it, and the rows read so far must not.
+		// Whatever happens to the second step, the first step's rows are sent.
+		if (read.followUp && read.followUp.request) {
+			progress(deskTabId, requestId, "reading", read.followUp.message || "Reading more…");
+			let more = null;
+			let why = null;
+			try {
+				more = await chrome.tabs.sendMessage(portalTabId, {
+					...read.followUp.request,
+					requestId,
+					budgetMs: READ_BUDGET_MS,
+				});
+			} catch (err) {
+				why = `the page reloaded or the tab closed (${(err && err.message) || err})`;
+			}
+			if (more && more.ok && Array.isArray(more.rows)) {
+				read.rows = more.rows;
+				read.coverage = (read.coverage || []).concat(more.coverage || []);
+			} else {
+				read.coverage = (read.coverage || []).concat([{
+					list: read.followUp.list || "the second step",
+					read: null,
+					reason: why || (more && more.message) || "the page did not answer",
+					window: null,
+				}]);
+			}
+		}
+
 		const noun = kind.noun;
 
 		progress(

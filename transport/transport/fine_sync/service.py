@@ -1287,7 +1287,22 @@ def ingest_client_permits(portal, rows, truncated=0, fetched_at=None):
 	vehicles = {}
 	for permit in permits:
 		key = (permit["emirate"], permit["plate_code"], permit["plate_number"])
-		entry = vehicles.setdefault(key, {"expiry": None, "none": 0, "other": [], "statuses": set()})
+		entry = vehicles.setdefault(
+			key,
+			{"expiry": None, "none": 0, "other": [], "statuses": set(), "number": None,
+			 "odd_number": None, "detail_expiry": None, "detail_expiry_text": None, "detail_note": None},
+		)
+		# From the vehicle's detail page, when the reader reached it. One page per
+		# vehicle, so every row of a vehicle carries the same values.
+		for field, source in (
+			("number", "permit_number"),
+			("odd_number", "odd_permit_number"),
+			("detail_expiry", "detail_expiry"),
+			("detail_expiry_text", "detail_expiry_text"),
+			("detail_note", "detail_note"),
+		):
+			if permit.get(source) and not entry[field]:
+				entry[field] = permit[source]
 		if permit.get("vehicle_status"):
 			entry["statuses"].add(permit["vehicle_status"])
 		if permit["permit"] == "active":
@@ -1306,8 +1321,28 @@ def ingest_client_permits(portal, rows, truncated=0, fetched_at=None):
 	status_field = frappe.get_meta("Rental Vehicle").has_field("asateel_vehicle_status")
 	read_at = frappe.utils.now_datetime()
 
-	updated, unchanged, no_permit, registered = 0, 0, 0, 0
+	updated, unchanged, no_permit, registered, numbers = 0, 0, 0, 0, 0
 	unmatched, earlier, other, failed, not_registered = [], [], [], [], []
+	no_number, odd_numbers, expiry_differs = [], [], []
+
+	def record_number(vehicle, entry):
+		"""Writes the permit number from the detail page. The portal wins for the
+		number; nothing is written when the page gave none ("NA") or the reader
+		did not get there. True when the vehicle's number changed."""
+		number = entry["number"]
+		if not number:
+			return False
+		current = frappe.db.get_value("Rental Vehicle", vehicle.name, "asateel_permit_number")
+		if (current or "").strip().upper() == number:
+			return False
+		frappe.db.set_value("Rental Vehicle", vehicle.name, "asateel_permit_number", number)
+		frappe.get_doc("Rental Vehicle", vehicle.name).add_comment(
+			"Info",
+			_("Asateel permit number set to {0} from the Asateel portal (was {1}).").format(
+				number, current or _("blank")
+			),
+		)
+		return True
 
 	def printed(key):
 		return " ".join(part for part in key if part)
@@ -1368,7 +1403,20 @@ def ingest_client_permits(portal, rows, truncated=0, fetched_at=None):
 						"asateel_status_updated_on": read_at,
 					},
 				)
+			# The number first, so a Compliance Document the expiry creates carries it.
+			number_changed = record_number(vehicle, entry)
 			outcome = record_expiry(vehicle, entry)
+			if number_changed and outcome != "updated":
+				# The expiry was not rewritten, so the Compliance Document was not
+				# touched: give it the new number against the date it already has.
+				expiry = frappe.db.get_value("Rental Vehicle", vehicle.name, "asateel_permit_expiry")
+				if expiry:
+					from transport.transport.compliance_sync import upsert_compliance_document
+
+					upsert_compliance_document(
+						"Rental Vehicle", vehicle.name, "Asateel Permit", expiry,
+						document_number=entry["number"], update=True,
+					)
 		except Exception:
 			frappe.db.rollback(save_point=savepoint)
 			failed.append(printed(key))
@@ -1378,6 +1426,19 @@ def ingest_client_permits(portal, rows, truncated=0, fetched_at=None):
 			)
 			continue
 
+		numbers += number_changed
+		if entry["expiry"] and not entry["number"]:
+			# An active permit whose number did not come back: say why.
+			if entry["odd_number"]:
+				odd_numbers.append(f"{printed(key)}: {entry['odd_number']}")
+			elif entry["detail_note"]:
+				no_number.append(f"{printed(key)} ({entry['detail_note']})")
+			elif entry["detail_expiry_text"] is not None or entry["detail_expiry"]:
+				no_number.append(f"{printed(key)} ({_('the detail page shows no permit number')})")
+		if entry["expiry"] and entry["detail_expiry"] and entry["detail_expiry"] != entry["expiry"]:
+			expiry_differs.append(
+				f"{printed(key)} ({_('list')} {entry['expiry']}, {_('detail page')} {entry['detail_expiry']})"
+			)
 		if status_field:
 			if is_registered:
 				registered += 1
@@ -1407,6 +1468,26 @@ def ingest_client_permits(portal, rows, truncated=0, fetched_at=None):
 			len(vehicles), updated, unchanged, no_permit
 		)
 	]
+	if numbers:
+		parts.append(_("{0} permit number(s) recorded.").format(numbers))
+	if no_number:
+		parts.append(
+			_("Permit number not read, so the list's status and expiry were kept ({0}): {1}.").format(
+				len(no_number), listed(no_number)
+			)
+		)
+	if odd_numbers:
+		parts.append(
+			_("Permit number not in a recognised form, so not recorded ({0}): {1}.").format(
+				len(odd_numbers), listed(odd_numbers)
+			)
+		)
+	if expiry_differs:
+		parts.append(
+			_("Expiry on the detail page differs from the list - the list's date was used ({0}): {1}.").format(
+				len(expiry_differs), listed(expiry_differs)
+			)
+		)
 	if registered:
 		parts.append(_("{0} fleet vehicle(s) Registered on Asateel.").format(registered))
 	if not_registered:

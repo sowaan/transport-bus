@@ -7,9 +7,11 @@
 //
 // Four principles, the same as the other readers:
 //
-// 1. **Nothing in a row is clicked.** The one control this presses is the
-//    pager's "next page" arrow. Not the select boxes, not a row's actions menu,
-//    not Export, not the filter's Apply.
+// 1. **Only reading controls are pressed.** Reading the list presses only the
+//    pager's "next page" arrow. Reading permit numbers (a second step, below)
+//    also presses the "Active Permits" tile, a row's three-dot Actions button and
+//    its "View Details" item, and goes Back. Never "Change Business Domain", the
+//    select boxes, Export, the filter's Apply, or any tab of a vehicle's page.
 //
 // 2. **Every vehicle is read or the read is reported partial.** The pager is
 //    followed until its next arrow is gone, and the count is then checked against
@@ -37,7 +39,7 @@
 	if (globalThis.__tffAsateelLoaded) return;
 	globalThis.__tffAsateelLoaded = true;
 
-	const { extractRows, nextPage } = globalThis.PORTAL_EXTRACTORS.asateel;
+	const { extractRows, nextPage, readDetail } = globalThis.PORTAL_EXTRACTORS.asateel;
 
 	const POLL_MS = 250;
 
@@ -148,6 +150,28 @@
 	}
 
 	/**
+	 * Presses the pager's next arrow and waits for the next page to be drawn.
+	 * "turned", "last" when there is no next arrow, or what the page looked like
+	 * when the turn did not land.
+	 *
+	 * The pager moves at once; the rows follow when the server answers. Both have
+	 * to change - and the pager by exactly one - before the page counts as turned.
+	 * Where there is no numbered pager, the rows alone decide.
+	 */
+	async function turnPage() {
+		const before = shown();
+		const turnedFrom = activePage();
+		if (!nextPage()) return "last";
+		const landed = () => {
+			const now = shown();
+			if (!now || now === before) return false;
+			return turnedFrom === null || activePage() === turnedFrom + 1;
+		};
+		if (await waitFor(landed, PAGE_GRACE_MS)) return "turned";
+		return pageState(before, turnedFrom);
+	}
+
+	/**
 	 * The vehicles read, and the reason the list is not whole (null when it is).
 	 * A read that stops early still returns what it got: a permit expiry only ever
 	 * moves forward and writing it twice changes nothing, so ten good rows are
@@ -202,22 +226,11 @@
 				return { rows: all, reason: "the read ran out of time with more pages still to read" };
 			}
 
-			const before = shown();
-			const turnedFrom = activePage();
+			const turn = await turnPage();
 			// No next arrow left means this was the last page.
-			if (!nextPage()) break;
-
-			// The pager moves at once; the rows follow when the server answers. Both
-			// have to change - and the pager by exactly one - before the page counts
-			// as turned. Where there is no numbered pager, the rows alone decide.
-			const landed = () => {
-				const now = shown();
-				if (!now || now === before) return false;
-				return turnedFrom === null || activePage() === turnedFrom + 1;
-			};
-			const moved = await waitFor(landed, PAGE_GRACE_MS);
-			if (!moved) {
-				return { rows: all, reason: `page ${pages + 1} never loaded, so the list was read in part (${pageState(before, turnedFrom)})` };
+			if (turn === "last") break;
+			if (turn !== "turned") {
+				return { rows: all, reason: `page ${pages + 1} never loaded, so the list was read in part (${turn})` };
 			}
 		}
 
@@ -246,8 +259,253 @@
 		return { rows: all, reason: null };
 	}
 
+	// -- permit numbers: the vehicle detail pages ----------------------------
+	//
+	// The list has no permit number; each vehicle's detail page does. It is
+	// reached the way a person reaches it - the row's three-dot Actions menu,
+	// "View Details" - and left with the browser's Back. Seen in the client's
+	// screen recording (2026-10-23), not in any saved page: the menu is drawn
+	// only when opened. So every step waits on something it can see (the menu
+	// item, the detail route and its permit card, the list's rows standing
+	// still), never on a fixed pause, and anything unexpected ends that vehicle
+	// - it keeps what the list said - rather than being clicked through.
+	//
+	// What the recording showed, and this is built around:
+	// * The menu has exactly two items, "View Details" and "Change Business
+	//   Domain". Only an element whose text starts "View Details" and does not
+	//   also hold "Change Business Domain" is ever clicked.
+	// * Back lands on page 1 of the UNFILTERED list, after "Loading items...".
+	// * The "Active Permits" tile filters the list to vehicles with an active
+	//   permit (about twenty, two pages), so each trip back costs one click.
+	//   Whether it took is checked - every row shown has an active permit - and
+	//   if it did not, the unfiltered list is walked instead.
+
+	const DETAIL_LIST = "Asateel permit numbers";
+	const DETAIL_GRACE_MS = 45000;
+	const MENU_GRACE_MS = 8000;
+	const ACTIVE_RE = /^\d+ Days?\b/;
+
+	// List rows from the last read, kept for the detail pass that follows it.
+	let lastRows = null;
+
+	const rowKeyOf = (row) => [row._emirate, row._code, row._number].join(" ");
+	const onDetailPage = () => /\/tpc-portal\/manage-vehicle\/detail\/\d+/.test(location.pathname);
+	const onListPage = () => /\/tpc-portal\/manage-vehicle\/?$/.test(location.pathname);
+
+	const visible = (el) => !!(el && el.getClientRects().length);
+	const textOf = (el) => (el ? el.textContent : "").replace(/\s+/g, " ").trim();
+
+	/** The table's vehicle rows as [tr, row] pairs, in the order extractRows reads them. */
+	function rowElements() {
+		const table = document.querySelector(".v-data-table table");
+		const rows = extractRows();
+		if (!table || !rows) return [];
+		const trs = [...table.querySelectorAll("tbody tr")].filter((tr) => {
+			if ((tr.className || "").includes("expanded")) return false;
+			const cells = [...tr.children];
+			return !(cells.length === 1 && cells[0].hasAttribute("colspan"));
+		});
+		// Pairing by position is only safe when both counted the same rows.
+		if (trs.length !== rows.length) return [];
+		return trs.map((tr, i) => [tr, rows[i]]);
+	}
+
+	/** The header tile with this title, as the element a person clicks. */
+	function tileCard(label) {
+		for (const box of document.querySelectorAll(".left-content")) {
+			const title = box.querySelector(".title");
+			if (title && textOf(title) === label) return box.closest(".v-card, .custom-card") || box;
+		}
+		return null;
+	}
+
+	/** Back on the list, its rows drawn and still. */
+	async function backToList(deadline) {
+		if (onDetailPage()) history.back();
+		const drawn = await waitFor(() => onListPage() && shown(), Math.min(DETAIL_GRACE_MS, Math.max(0, deadline - Date.now())));
+		if (!drawn) return false;
+		return settle(deadline);
+	}
+
+	/**
+	 * Filters the list to active permits with the tile. True when the list shown
+	 * afterwards is made only of active-permit vehicles.
+	 */
+	async function filterToActive(deadline) {
+		const allActive = () => {
+			const rows = extractRows();
+			return !!(rows && rows.length && rows.every((row) => ACTIVE_RE.test(row._permit)));
+		};
+		if (allActive()) return true;
+		const card = tileCard("Active Permits");
+		if (!card) return false;
+		const before = shown();
+		card.click();
+		// The list blanks ("Loading items...") and redraws; wait for it to change
+		// and then stand still. A tile that does nothing is caught by the check.
+		await waitFor(() => shown() && shown() !== before, Math.min(PAGE_GRACE_MS, Math.max(0, deadline - Date.now())));
+		if (!(await settle(deadline))) return false;
+		return allActive();
+	}
+
+	/** Walks the list from where it is to the first row still to be read. */
+	async function findPending(pending, deadline) {
+		for (let page = 0; page < MAX_PAGES; page += 1) {
+			const match = rowElements().find(([, row]) => pending.has(rowKeyOf(row)));
+			if (match) return match;
+			if (Date.now() > deadline) return null;
+			const turn = await turnPage();
+			if (turn !== "turned") return null;
+			if (!(await settle(deadline))) return null;
+		}
+		return null;
+	}
+
+	/** The "View Details" item of the open Actions menu, or why there is not exactly one. */
+	function viewDetailsItem() {
+		const hits = [];
+		for (const el of document.querySelectorAll("body *")) {
+			if (el.closest(".v-data-table")) continue;
+			const t = textOf(el);
+			if (!t.startsWith("View Details") || t.includes("Change Business Domain")) continue;
+			if (!visible(el)) continue;
+			hits.push(el);
+		}
+		// The item itself is the outermost element that is only the item.
+		const outer = hits.filter((el) => !hits.some((other) => other !== el && other.contains(el)));
+		if (outer.length === 1) return { item: outer[0] };
+		return { reason: outer.length ? "more than one View Details item was showing" : null };
+	}
+
+	function closeMenu() {
+		document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", keyCode: 27, bubbles: true }));
+	}
+
+	/** Opens one vehicle's detail page from its row and reads it. */
+	async function readOne(tr, row, deadline) {
+		const cells = [...tr.children];
+		const actions = cells[cells.length - 1];
+		const button = actions && actions.querySelector("button[aria-haspopup], button");
+		if (!button) return { reason: "its Actions button was not found" };
+
+		button.click();
+		let found = null;
+		await waitFor(() => {
+			found = viewDetailsItem();
+			return found.item || found.reason;
+		}, MENU_GRACE_MS);
+		if (!found || !found.item) {
+			closeMenu();
+			return { reason: (found && found.reason) || "its Actions menu showed no View Details item" };
+		}
+		found.item.click();
+
+		// The route changes first; the permit card, then the right vehicle, follow.
+		const want = row._number;
+		let detail = null;
+		const arrived = await waitFor(() => {
+			if (!onDetailPage()) return false;
+			detail = readDetail();
+			if (!detail) return false;
+			const number = (detail.plate.split("-").pop() || "").trim();
+			return number === want;
+		}, Math.min(DETAIL_GRACE_MS, Math.max(0, deadline - Date.now())));
+		if (!arrived) {
+			if (!onDetailPage()) return { reason: "View Details did not open the vehicle's page" };
+			return { reason: `the page opened showed ${detail ? `plate ${detail.plate}` : "no permit card"}, not this vehicle` };
+		}
+
+		// The number matched; the rest of the plate has to as well.
+		const emirate = detail.emirate.trim().toUpperCase();
+		const category = detail.category.trim().toUpperCase();
+		if ((emirate && emirate !== row._emirate.toUpperCase()) || (category && category !== row._code.toUpperCase())) {
+			return { reason: `the page opened was ${detail.emirate} ${detail.category} ${detail.plate}, not this vehicle` };
+		}
+		return { detail };
+	}
+
+	/**
+	 * Visits the detail page of every active-permit vehicle in `rows` and returns
+	 * the rows with `_permit_number` / `_detail_expiry` filled - or `_detail_note`
+	 * saying why not. A vehicle that fails is one vehicle; the pass goes on.
+	 */
+	async function readPermitNumbers(rows, deadline, progress) {
+		const merged = rows.map((row) => ({ ...row }));
+		// One vehicle, one detail page - but it can be listed once per business
+		// domain, and every one of its rows gets what the page said.
+		const byKey = new Map();
+		for (const row of merged) {
+			if (!ACTIVE_RE.test(row._permit || "")) continue;
+			const key = rowKeyOf(row);
+			if (!byKey.has(key)) byKey.set(key, []);
+			byKey.get(key).push(row);
+		}
+		const pending = new Set(byKey.keys());
+		const total = pending.size;
+		let read = 0;
+		let filtered = null; // null: not tried yet; false: the tile did not filter
+		let stop = null;
+
+		while (pending.size) {
+			if (Date.now() > deadline) { stop = "the read ran out of time"; break; }
+			if (!signedIn()) { stop = "the account was signed out"; break; }
+			if (!(await backToList(deadline))) { stop = "the vehicle list did not come back after a detail page"; break; }
+
+			if (filtered !== false) {
+				const ok = await filterToActive(deadline);
+				if (!ok) {
+					if (filtered === null) {
+						filtered = false; // walk the unfiltered list from here on
+						if (!(await backToList(deadline))) { stop = "the vehicle list did not settle"; break; }
+					} else {
+						stop = "the Active Permits filter stopped working part-way";
+						break;
+					}
+				} else {
+					filtered = true;
+				}
+			}
+
+			const match = await findPending(pending, deadline);
+			if (!match) break; // the rest are not in the list as it now stands
+			const [tr, listed] = match;
+			const key = rowKeyOf(listed);
+			const vehicleRows = byKey.get(key);
+			pending.delete(key);
+			progress({ stage: "reading", message: `Reading permit number ${total - pending.size} of ${total}…` });
+
+			const result = await readOne(tr, listed, deadline);
+			for (const row of vehicleRows) {
+				if (result.detail) {
+					row._permit_number = result.detail.permit_number;
+					row._detail_expiry = result.detail.expiry;
+				} else {
+					row._detail_note = result.reason;
+				}
+			}
+			if (result.detail) read += 1;
+		}
+
+		for (const key of pending) {
+			for (const row of byKey.get(key)) row._detail_note = stop || "it was not found in the list on the way back";
+		}
+		// Leave the operator on the list, not on the last vehicle visited.
+		if (onDetailPage()) await backToList(deadline);
+
+		const missed = total - read;
+		return {
+			rows: merged,
+			coverage: [{
+				list: DETAIL_LIST,
+				read,
+				reason: missed ? `${missed} of ${total} not read${stop ? ` - ${stop}` : ""}` : null,
+				window: null,
+			}],
+		};
+	}
+
 	chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-		if (!message || message.type !== "TFF_READ") return;
+		if (!message || (message.type !== "TFF_READ" && message.type !== "TFF_DETAILS")) return;
 
 		const progress = (payload) => {
 			chrome.runtime
@@ -257,6 +515,22 @@
 					// not a reason to abandon a read in flight.
 				});
 		};
+
+		if (message.type === "TFF_DETAILS") {
+			(async () => {
+				const budget = Number(message.budgetMs) > 0 ? Number(message.budgetMs) : DEFAULT_BUDGET_MS;
+				const deadline = Date.now() + Math.max(0, budget - BUDGET_MARGIN_MS);
+				if (!lastRows) {
+					sendResponse({ ok: false, message: "the vehicle list was not read in this tab first" });
+					return;
+				}
+				const result = await readPermitNumbers(lastRows, deadline, progress);
+				sendResponse({ ok: true, ...result });
+			})().catch((error) => {
+				sendResponse({ ok: false, message: String(error && error.message) });
+			});
+			return true;
+		}
 
 		(async () => {
 			const budget = Number(message.budgetMs) > 0 ? Number(message.budgetMs) : DEFAULT_BUDGET_MS;
@@ -332,12 +606,21 @@
 				return;
 			}
 
+			// The permit numbers are a second step, asked for in a second message:
+			// it navigates away from the list, and if the page reloads on the way
+			// this script goes with it. Sent separately, the vehicles read above
+			// are already in the background's hands when that happens.
+			lastRows = rows;
+			const active = rows.filter((row) => ACTIVE_RE.test(row._permit || "")).length;
 			sendResponse({
 				ok: true,
 				state: "read",
 				rows,
 				truncated: !!reason,
 				coverage: [{ list: LIST, read: rows.length, reason: reason || null, window: null }],
+				followUp: active
+					? { request: { type: "TFF_DETAILS" }, list: DETAIL_LIST, message: `Reading ${active} permit number(s)…` }
+					: null,
 			});
 		})().catch((error) => {
 			sendResponse({ ok: false, state: "error", message: String(error && error.message) });

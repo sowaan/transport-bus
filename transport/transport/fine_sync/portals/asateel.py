@@ -29,9 +29,15 @@ What the page is, read from the saved copy the client sent (2026-10-10):
   seen. The capture holds 19 active permits' worth of tiles but only one active
   row, so how an EXPIRED permit is shown is not known: such a cell is passed on
   as it is, reported, and never turned into a date.
-* The list carries no permit NUMBER. That is on the vehicle's own page
-  ("Permits" tab), which was captured on a vehicle with no permit and so shows
-  nothing to read. It is not read here.
+* The list carries no permit NUMBER. It is on each vehicle's detail page,
+  `/tpc-portal/manage-vehicle/detail/<id>`, reached from the row's three-dot
+  Actions menu > "View Details" (seen in the client's screen recording,
+  2026-10-23; the menu is drawn only when opened, so no capture holds it). The
+  id is nowhere in the list. The detail page's left card reads "Permit Number"
+  and "Expiry Date" - both the literal "NA" for a vehicle with no permit - and
+  its Basic Information gives the plate as Plate Number "AD-30134", Plate
+  Source "Abu Dhabi", Plate Category "1". `READ_DETAIL_JS` reads that page;
+  the extension's reader does the navigating, for active-permit vehicles only.
 
 What is not known and so is not assumed: the empty list, the expired-permit
 wording above, the page's loading indicator (the reader waits for the rows to
@@ -121,6 +127,40 @@ NEXT_PAGE_JS = r"""() => {
 }"""
 
 
+# Reads the vehicle detail page's permit card and plate. Null until the page is
+# a detail page and its permit card is drawn - the caller waits on that, and then
+# checks the plate against the row it opened, because the previous vehicle's
+# page can linger for a moment after the route changes.
+READ_DETAIL_JS = r"""() => {
+	if (!/\/tpc-portal\/manage-vehicle\/detail\/\d+/.test(location.pathname)) return null;
+	const text = (el) => (el ? el.textContent : '').replace(/\s+/g, ' ').trim();
+
+	// Left card: <div class="view-data"><label>Permit Number</label><p>...</p>.
+	const card = {};
+	for (const box of document.querySelectorAll('.view-data')) {
+		const label = text(box.querySelector('label'));
+		if (label && !(label in card)) card[label] = text(box.querySelector('p'));
+	}
+	if (!('Permit Number' in card)) return null;
+
+	// Basic Information: <div class="info-row"><div class="field-label">...
+	const info = {};
+	for (const row of document.querySelectorAll('.info-row')) {
+		const label = text(row.querySelector('.field-label'));
+		if (label && !(label in info)) info[label] = text(row.querySelector('.field-value'));
+	}
+
+	return {
+		permit_number: card['Permit Number'] || '',
+		expiry: card['Expiry Date'] || '',
+		plate: info['Plate Number'] || card['Plate Number'] || '',
+		emirate: card['Emirates'] || '',
+		category: info['Plate Category'] || '',
+		status: text(document.querySelector('.status-chip')),
+	};
+}"""
+
+
 MONTHS = {
 	"jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
 	"jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
@@ -129,6 +169,35 @@ MONTHS = {
 # "55 Days Dec 31, 2026" - the days and the date are two lines of one cell.
 ACTIVE_RE = re.compile(r"^(\d+) Days? ([A-Za-z]{3,9}) (\d{1,2}), (\d{4})$")
 NO_PERMIT = "no active permit"
+
+# The detail page's Expiry Date: "Thu, Sep 02, 2027".
+DETAIL_DATE_RE = re.compile(r"^(?:[A-Za-z]{3,9},\s*)?([A-Za-z]{3,9}) (\d{1,2}), (\d{4})$")
+
+# A permit number as the detail page prints one ("PAS-V-2026-49370160"). Kept
+# loose about the shape - only one has been seen - but strict about what is not
+# a number: "NA", blanks and anything with spaces or punctuation beyond - / _ .
+PERMIT_NUMBER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9/_.-]{2,60}$")
+NOT_A_NUMBER = {"na", "n/a", "-", "--", "none", "null"}
+
+
+def parse_detail_date(text):
+	"""ISO date from the detail page's "Thu, Sep 02, 2027", or None."""
+	found = DETAIL_DATE_RE.match(" ".join((text or "").split()))
+	month = MONTHS.get(found.group(1)[:3].lower()) if found else None
+	if not month:
+		return None
+	return f"{int(found.group(3)):04d}-{month:02d}-{int(found.group(2)):02d}"
+
+
+def parse_permit_number(text):
+	"""(number, None), (None, None) for "NA"/blank, or (None, text) for a value
+	that does not look like a permit number - reported, never stored."""
+	value = " ".join((text or "").split())
+	if not value or value.lower() in NOT_A_NUMBER:
+		return None, None
+	if PERMIT_NUMBER_RE.match(value):
+		return value.upper(), None
+	return None, value
 
 
 class AsateelPermitReader:
@@ -141,7 +210,7 @@ class AsateelPermitReader:
 
 	client_reader = "asateel"
 	client_origin = "https://asateelplus.itc.gov.ae"
-	client_extractors = ("EXTRACT_ROWS_JS", "NEXT_PAGE_JS")
+	client_extractors = ("EXTRACT_ROWS_JS", "NEXT_PAGE_JS", "READ_DETAIL_JS")
 
 	# Foreground: the operator signs in themselves, in this tab.
 	client_unattended = False
@@ -185,6 +254,8 @@ class AsateelPermitReader:
 				permit = "active"
 				expiry = f"{int(found.group(4)):04d}-{month:02d}-{int(found.group(3)):02d}"
 
+		permit_no, odd_permit_no = parse_permit_number(row.get("_permit_number"))
+
 		return {
 			"emirate": emirate,
 			"plate_code": code,
@@ -195,4 +266,10 @@ class AsateelPermitReader:
 			"permit": permit,
 			"expiry_date": expiry,
 			"permit_text": permit_text,
+			# From the vehicle's detail page, when the reader got there.
+			"permit_number": permit_no,
+			"odd_permit_number": odd_permit_no,
+			"detail_expiry": parse_detail_date(row.get("_detail_expiry")),
+			"detail_expiry_text": " ".join((row.get("_detail_expiry") or "").split()) or None,
+			"detail_note": " ".join((row.get("_detail_note") or "").split())[:200] or None,
 		}
