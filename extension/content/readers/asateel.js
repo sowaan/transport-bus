@@ -63,7 +63,31 @@
 
 	const LIST = "Asateel vehicle permits";
 
-	const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+	/**
+	 * Waits ms milliseconds - timed by the extension's service worker, not by this
+	 * page. Chrome slows a hidden tab's timers to one tick a second, and after five
+	 * minutes hidden to one tick a MINUTE; a read that polls every quarter second
+	 * would then take minutes per vehicle the moment the operator looked at the
+	 * ERPNext tab to watch its progress. The worker's timers are not throttled,
+	 * and its reply arrives as a message, which is not either. If the worker does
+	 * not answer (an older build, a severed context) it falls back to a plain
+	 * timer for whatever time is left.
+	 */
+	async function sleep(ms) {
+		const started = Date.now();
+		try {
+			await new Promise((resolve) => {
+				chrome.runtime.sendMessage({ type: "TFF_SLEEP", ms }, () => {
+					void chrome.runtime.lastError; // read, so Chrome does not log it
+					resolve();
+				});
+			});
+		} catch {
+			// fall through to the plain timer
+		}
+		const left = ms - (Date.now() - started);
+		if (left > 20) await new Promise((resolve) => setTimeout(resolve, left));
+	}
 
 	async function waitFor(probe, timeoutMs) {
 		const started = Date.now();
@@ -73,6 +97,31 @@
 			if (Date.now() - started >= timeoutMs) return null;
 			await sleep(POLL_MS);
 		}
+	}
+
+	// A note on the page itself, while the permit numbers are being read. The
+	// portal's menus are drawn with the browser's frame callbacks, which a hidden
+	// tab never gets, so the read needs this tab in front - and the person at the
+	// keyboard is the one who can see it is not.
+	const BANNER_ID = "tff-asateel-banner";
+	function banner(text) {
+		let el = document.getElementById(BANNER_ID);
+		if (!text) {
+			if (el) el.remove();
+			return;
+		}
+		if (!el) {
+			el = document.createElement("div");
+			el.id = BANNER_ID;
+			el.setAttribute(
+				"style",
+				"position:fixed;left:0;right:0;bottom:0;z-index:2147483647;padding:8px 14px;" +
+					"background:#1f3a5f;color:#fff;font:600 13px/1.3 sans-serif;text-align:center;" +
+					"pointer-events:none"
+			);
+			(document.body || document.documentElement).appendChild(el);
+		}
+		el.textContent = text;
 	}
 
 	/** Whether the account is signed in: the app draws a Log Out link only then. */
@@ -288,6 +337,24 @@
 	// List rows from the last read, kept for the detail pass that follows it.
 	let lastRows = null;
 
+	// What the permit-number pass is doing right now, in words. Sent with every
+	// heartbeat, so the desk dialog says WHERE a slow vehicle is, not just that
+	// one is slow.
+	let doing = "";
+
+	// How long a vehicle waits for this tab to be shown before it is given up on.
+	const FRONT_MS = 120000;
+
+	// How often the pass reports in. The extension's service worker is shut down
+	// by Chrome after thirty seconds without an event; a vehicle that takes
+	// longer than that between two progress lines would otherwise take the whole
+	// fetch with it, silently, and nothing read so far would reach ERPNext.
+	const HEARTBEAT_MS = 8000;
+
+	// One vehicle's visit is given this long in all; past it the vehicle is
+	// given up on, named in the summary, and the pass goes on to the next.
+	const VEHICLE_MS = 90000;
+
 	const rowKeyOf = (row) => [row._emirate, row._code, row._number].join(" ");
 	const onDetailPage = () => /\/tpc-portal\/manage-vehicle\/detail\/\d+/.test(location.pathname);
 	const onListPage = () => /\/tpc-portal\/manage-vehicle\/?$/.test(location.pathname);
@@ -381,6 +448,17 @@
 		document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", keyCode: 27, bubbles: true }));
 	}
 
+	/**
+	 * Waits for this tab to be the one on screen, asking the extension to bring it
+	 * forward. True once it is.
+	 */
+	async function whenVisible(sendFront) {
+		if (!document.hidden) return true;
+		doing = "waiting for this tab to be brought to the front";
+		sendFront();
+		return !!(await waitFor(() => !document.hidden, FRONT_MS));
+	}
+
 	/** Opens one vehicle's detail page from its row and reads it. */
 	async function readOne(tr, row, deadline) {
 		const cells = [...tr.children];
@@ -388,6 +466,7 @@
 		const button = actions && actions.querySelector("button[aria-haspopup], button");
 		if (!button) return { reason: "its Actions button was not found" };
 
+		doing = "opening the Actions menu";
 		button.click();
 		let found = null;
 		await waitFor(() => {
@@ -398,6 +477,7 @@
 			closeMenu();
 			return { reason: (found && found.reason) || "its Actions menu showed no View Details item" };
 		}
+		doing = "waiting for the vehicle's page";
 		found.item.click();
 
 		// The route changes first; the permit card, then the right vehicle, follow.
@@ -410,6 +490,7 @@
 			const number = (detail.plate.split("-").pop() || "").trim();
 			return number === want;
 		}, Math.min(DETAIL_GRACE_MS, Math.max(0, deadline - Date.now())));
+		doing = "reading the vehicle's page";
 		if (!arrived) {
 			if (!onDetailPage()) return { reason: "View Details did not open the vehicle's page" };
 			return { reason: `the page opened showed ${detail ? `plate ${detail.plate}` : "no permit card"}, not this vehicle` };
@@ -445,52 +526,75 @@
 		let read = 0;
 		let filtered = null; // null: not tried yet; false: the tile did not filter
 		let stop = null;
+		let beat = () => {};
+		const heartbeat = setInterval(() => beat(), HEARTBEAT_MS);
+		try {
 
-		while (pending.size) {
-			if (Date.now() > deadline) { stop = "the read ran out of time"; break; }
-			if (!signedIn()) { stop = "the account was signed out"; break; }
-			if (!(await backToList(deadline))) { stop = "the vehicle list did not come back after a detail page"; break; }
+			while (pending.size) {
+				if (Date.now() > deadline) { stop = "the read ran out of time"; break; }
+				if (!signedIn()) { stop = "the account was signed out"; break; }
+				doing = "going back to the vehicle list";
+				if (!(await backToList(deadline))) { stop = "the vehicle list did not come back after a detail page"; break; }
 
-			if (filtered !== false) {
-				const ok = await filterToActive(deadline);
-				if (!ok) {
-					if (filtered === null) {
-						filtered = false; // walk the unfiltered list from here on
-						if (!(await backToList(deadline))) { stop = "the vehicle list did not settle"; break; }
+				if (filtered !== false) {
+					doing = "applying the Active Permits filter";
+					const ok = await filterToActive(deadline);
+					if (!ok) {
+						if (filtered === null) {
+							filtered = false; // walk the unfiltered list from here on
+							if (!(await backToList(deadline))) { stop = "the vehicle list did not settle"; break; }
+						} else {
+							stop = "the Active Permits filter stopped working part-way";
+							break;
+						}
 					} else {
-						stop = "the Active Permits filter stopped working part-way";
-						break;
+						filtered = true;
 					}
-				} else {
-					filtered = true;
 				}
+
+				doing = "finding the next vehicle in the list";
+				const match = await findPending(pending, deadline);
+				if (!match) break; // the rest are not in the list as it now stands
+				const [tr, listed] = match;
+				const key = rowKeyOf(listed);
+				const vehicleRows = byKey.get(key);
+				pending.delete(key);
+				const position = `${total - pending.size} of ${total}`;
+				progress({ stage: "reading", message: `Reading permit number ${position}…` });
+				doing = "starting";
+				beat = () => progress({ stage: "reading", needsFront: document.hidden, message: `Reading permit number ${position} - ${doing}…` });
+
+				banner("Fine Fetch is reading permit numbers - please keep this tab in front until it finishes.");
+				if (!(await whenVisible(() => progress({ stage: "reading", needsFront: true, message: `Reading permit number ${position} - keep the Asateel tab in front…` })))) {
+					stop = "the Asateel tab was not in front, so its menus cannot open";
+					for (const row of vehicleRows) row._detail_note = stop;
+					break;
+				}
+
+				// One vehicle gets VEHICLE_MS and no more.
+				const visitDeadline = Math.min(deadline, Date.now() + VEHICLE_MS);
+				const result = await readOne(tr, listed, visitDeadline);
+				for (const row of vehicleRows) {
+					if (result.detail) {
+						row._permit_number = result.detail.permit_number;
+						row._detail_expiry = result.detail.expiry;
+					} else {
+						row._detail_note = result.reason;
+					}
+				}
+				if (result.detail) read += 1;
 			}
 
-			const match = await findPending(pending, deadline);
-			if (!match) break; // the rest are not in the list as it now stands
-			const [tr, listed] = match;
-			const key = rowKeyOf(listed);
-			const vehicleRows = byKey.get(key);
-			pending.delete(key);
-			progress({ stage: "reading", message: `Reading permit number ${total - pending.size} of ${total}…` });
-
-			const result = await readOne(tr, listed, deadline);
-			for (const row of vehicleRows) {
-				if (result.detail) {
-					row._permit_number = result.detail.permit_number;
-					row._detail_expiry = result.detail.expiry;
-				} else {
-					row._detail_note = result.reason;
-				}
+			for (const key of pending) {
+				for (const row of byKey.get(key)) row._detail_note = stop || "it was not found in the list on the way back";
 			}
-			if (result.detail) read += 1;
-		}
+			// Leave the operator on the list, not on the last vehicle visited.
+			if (onDetailPage()) await backToList(deadline);
 
-		for (const key of pending) {
-			for (const row of byKey.get(key)) row._detail_note = stop || "it was not found in the list on the way back";
+		} finally {
+			clearInterval(heartbeat);
+			banner(null);
 		}
-		// Leave the operator on the list, not on the last vehicle visited.
-		if (onDetailPage()) await backToList(deadline);
 
 		const missed = total - read;
 		return {

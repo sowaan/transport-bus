@@ -264,6 +264,14 @@ async function runFetch(request, deskTabId, erpOrigin) {
 
 	let portalTabId = null;
 
+	// Chrome shuts an extension's service worker down after thirty seconds
+	// without an event, and a pending promise does not count as one. A long step
+	// - the Asateel permit-number pass takes minutes - would otherwise lose the
+	// worker part-way: the desk dialog freezes on its last line, nothing is ever
+	// sent to ERPNext, and the content script carries on reading for nobody. Any
+	// extension API call resets the timer, so this makes one every twenty seconds.
+	const keepAlive = setInterval(() => chrome.runtime.getPlatformInfo(() => {}), 20000);
+
 	try {
 		progress(deskTabId, requestId, "opening", "Opening the portal page…");
 
@@ -315,6 +323,7 @@ async function runFetch(request, deskTabId, erpOrigin) {
 		const unattended = !!target.unattended;
 		const tab = await chrome.tabs.create({ url: target.url, active: !unattended });
 		portalTabId = tab.id;
+		if (inFlight) inFlight.portalTabId = tab.id;
 
 		if (unattended) {
 			progress(deskTabId, requestId, "opening", "Searching the portal - nothing to do here…");
@@ -376,9 +385,31 @@ async function runFetch(request, deskTabId, erpOrigin) {
 		// Asateel reader visits each vehicle's detail page for the permit number.
 		// Sent as its own message because that step navigates: if the page
 		// reloads, the reader goes with it, and the rows read so far must not.
-		// Whatever happens to the second step, the first step's rows are sent.
+		//
+		// The first step's rows are SAVED before the second starts. The second
+		// takes minutes and depends on a page the operator can close, a worker
+		// Chrome can stop and a portal that can stall; none of that may cost the
+		// statuses and expiry dates already in hand. Saving them twice is safe:
+		// the server records only what has changed.
+		let firstSave = null;
 		if (read.followUp && read.followUp.request) {
-			progress(deskTabId, requestId, "reading", read.followUp.message || "Reading more…");
+			// The operator may have gone back to the ERPNext tab to watch the first
+			// step; the second needs the portal in front.
+			await bringToFront(portalTabId);
+			firstSave = await ingest({
+				erpOrigin,
+				csrfToken,
+				portal,
+				rows: read.rows,
+				truncated: read.truncated,
+				method: kind.method,
+			});
+			progress(
+				deskTabId,
+				requestId,
+				"staging",
+				`${read.rows.length} ${kind.noun} saved. ${read.followUp.message || "Reading more…"}`
+			);
 			let more = null;
 			let why = null;
 			try {
@@ -393,6 +424,7 @@ async function runFetch(request, deskTabId, erpOrigin) {
 			if (more && more.ok && Array.isArray(more.rows)) {
 				read.rows = more.rows;
 				read.coverage = (read.coverage || []).concat(more.coverage || []);
+				read.secondStepRan = true;
 			} else {
 				read.coverage = (read.coverage || []).concat([{
 					list: read.followUp.list || "the second step",
@@ -413,14 +445,19 @@ async function runFetch(request, deskTabId, erpOrigin) {
 			read.rows.length
 		);
 
-		const result = await ingest({
-			erpOrigin,
-			csrfToken,
-			portal,
-			rows: read.rows,
-			truncated: read.truncated,
-			method: kind.method,
-		});
+		// Sent again only when the second step added anything to say; if it did
+		// not run, the first save already is the answer.
+		const result =
+			firstSave && !read.secondStepRan
+				? firstSave
+				: await ingest({
+						erpOrigin,
+						csrfToken,
+						portal,
+						rows: read.rows,
+						truncated: read.truncated,
+						method: kind.method,
+				  });
 
 		if (await settings.closeTabWhenDone()) {
 			await chrome.tabs.remove(portalTabId).catch(() => {});
@@ -448,6 +485,7 @@ async function runFetch(request, deskTabId, erpOrigin) {
 	} catch (error) {
 		return { ok: false, message: String((error && error.message) || error) };
 	} finally {
+		clearInterval(keepAlive);
 		inFlight = null;
 	}
 }
@@ -543,7 +581,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 	const deskTabId = sender.tab.id;
 	const erpOrigin = sender.origin;
 
-	inFlight = { requestId: message.requestId, deskTabId };
+	inFlight = { requestId: message.requestId, deskTabId, portalTabId: null, frontedAt: 0 };
 	sendResponse({ accepted: true });
 
 	runFetch(message, deskTabId, erpOrigin).then((outcome) => {
@@ -551,6 +589,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 	});
 
 	return undefined;
+});
+
+/** Makes a tab, and its window, the one on screen. */
+async function bringToFront(tabId) {
+	if (!tabId) return;
+	try {
+		const tab = await chrome.tabs.update(tabId, { active: true });
+		if (tab && tab.windowId !== undefined) await chrome.windows.update(tab.windowId, { focused: true });
+	} catch {
+		// The tab may be gone; the run notices that for itself.
+	}
+}
+
+// A page asks the worker to time a wait for it. A hidden tab's own timers are
+// throttled to once a minute; the worker's are not, and the reply is a message.
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+	if (!message || message.type !== "TFF_SLEEP" || !sender.tab) return undefined;
+	setTimeout(() => sendResponse({ ok: true }), Math.min(Math.max(Number(message.ms) || 0, 0), 60000));
+	return true;
 });
 
 // Progress raised inside the portal tab is addressed to the worker, because a
@@ -561,6 +618,13 @@ chrome.runtime.onMessage.addListener((message, sender) => {
 	if (!message || message.type !== "TFF_PROGRESS") return undefined;
 	if (!sender.tab || !inFlight) return undefined;
 	if (message.requestId !== inFlight.requestId) return undefined;
+	// A reader that cannot go on while its tab is hidden says so; bring it forward,
+	// at most every ten seconds so a person who keeps switching away is not fought
+	// on every heartbeat.
+	if (message.needsFront && inFlight.portalTabId && Date.now() - inFlight.frontedAt > 10000) {
+		inFlight.frontedAt = Date.now();
+		bringToFront(inFlight.portalTabId);
+	}
 	toDesk(inFlight.deskTabId, message);
 	return undefined;
 });
